@@ -68,6 +68,10 @@ python -m src gpu                               :: VRAM libre y qué modelo entr
 `vigilar` sirve si grabás con otra cosa: dejalo corriendo y tirá los WAV en
 `audio/` con el nombre `AAAA-MM-DD_<slug>.wav`.
 
+Podés dejar `vigilar` corriendo y usar `grabar` al mismo tiempo: un cerrojo en
+disco garantiza que nunca se carguen dos Whisper a la vez, que es lo que haría
+reventar la VRAM. El que llega segundo espera y reintenta solo.
+
 ---
 
 ## Verificar que anda
@@ -113,6 +117,8 @@ micrófono, y el error real de los timestamps.
 | Se cuela ruido de máquina como voz | subí `--umbral-vad 0.6` o `0.7` |
 | Whisper repite una frase en loop | ya está mitigado; si pasa igual, subí el umbral de VAD |
 | Palabras de planta mal transcriptas | agregalas arriba de todo en `glosario.txt` |
+| `Ya hay otra transcripción corriendo` | es a propósito: nunca corren dos a la vez. Esperá. Si ninguna está corriendo de verdad, borrá `.ainote.lock` |
+| `El micrófono no acepta 16000 Hz mono` | no es un error: avisa que graba en otro formato y sigue |
 
 ---
 

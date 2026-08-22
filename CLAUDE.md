@@ -57,6 +57,13 @@ Consecuencias operativas, todas obligatorias:
 3. Ollama se configura con `OLLAMA_KEEP_ALIVE=0` para que no quede residente.
 4. El código **verifica VRAM libre antes de cargar cualquier modelo** y falla con
    un mensaje claro en castellano, no con un OOM de CUDA.
+5. **Un cerrojo en disco (`.ainote.lock`) impide dos transcripciones a la vez.**
+   Como cada una corre en su propio proceso, un candado en memoria no alcanza.
+   El escenario que evita es real: con `vigilar` en una consola y `grabar` en
+   otra, al cortar la grabación se lanzan dos transcripciones del mismo audio.
+   `src/lock.py` usa `O_CREAT | O_EXCL`, atómico en Windows y en POSIX. El CLI
+   sale con código 4 cuando está ocupado, y el watcher lo reintenta después en
+   vez de marcar el audio como fallido.
 
 ### Presupuesto real: ~6,5 GB, no 8
 
@@ -95,7 +102,7 @@ Todo en texto plano, para leerlo, grepearlo y versionarlo sin herramientas
 propietarias.
 
 ```
-/audio/2026-08-22_perdidas.wav          PCM 16-bit mono
+/audio/2026-08-22_perdidas.wav          PCM 16-bit (16 kHz mono si el mic lo acepta)
 /transcripts/2026-08-22_perdidas.md     líneas [HH:MM:SS] + front-matter
 /transcripts/2026-08-22_perdidas.segments.json   índice inicio/fin por segmento
 /notes/2026-08-22_perdidas.md           texto libre + marcadores (Fase 2)
@@ -235,6 +242,12 @@ python -m src gpu             # VRAM libre (diagnóstico)
   falla, primero descartar que el error esté en el doble: `query_devices(None,
   'input')` devuelve el dispositivo por defecto, no la lista — ese fue un bug
   del doble que se hizo pasar por un bug del código.
+- **El formato de captura se negocia, no se asume.** 16 kHz mono es lo ideal,
+  pero hay entradas que no aceptan mono y otras que no aceptan 16 kHz.
+  `record._negociar_formato` prueba las cuatro combinaciones y usa la primera
+  que entre; `faster-whisper` resamplea y mezcla a mono al decodificar, así que
+  cualquiera sirve. No volver a clavar los canales en 1: un micrófono
+  estéreo-only hacía fallar `InputStream` con un error de PortAudio en inglés.
 - **Escritura incremental siempre.** El WAV se escribe bloque a bloque y el
   transcript línea a línea. Si el proceso muere a los 50 minutos, quedan 50
   minutos de audio válido. Nunca acumular una reunión entera en RAM.

@@ -32,11 +32,13 @@ def _pendientes() -> list[Path]:
     return [w for w in _wavs() if not paths.ruta_transcript(w.stem).exists()]
 
 
-def _transcribir_en_subproceso(wav: Path, extra: list[str]) -> bool:
+OCUPADO = 4  # el CLI devuelve esto cuando ya hay otra transcripción corriendo
+
+
+def _transcribir_en_subproceso(wav: Path, extra: list[str]) -> int:
     orden = [sys.executable, "-m", "src", "transcribir", str(wav), *extra]
     print(f"\n  --> {wav.name}")
-    resultado = subprocess.run(orden, cwd=str(paths.RAIZ))
-    return resultado.returncode == 0
+    return subprocess.run(orden, cwd=str(paths.RAIZ)).returncode
 
 
 def vigilar(intervalo: float = INTERVALO, extra: list[str] | None = None) -> int:
@@ -72,7 +74,12 @@ def vigilar(intervalo: float = INTERVALO, extra: list[str] | None = None) -> int
                 if previo is None or tamano != previo or tamano == 0:
                     continue
 
-                if not _transcribir_en_subproceso(wav, extra):
+                codigo = _transcribir_en_subproceso(wav, extra)
+                if codigo == OCUPADO:
+                    # Otra transcripción tiene la GPU. No es un fallo del audio:
+                    # se reintenta en el próximo sondeo.
+                    tamanos.pop(wav, None)
+                elif codigo != 0:
                     fallidos.add(wav)
                     print(f"  Falló la transcripción de {wav.name}. "
                           f"No lo reintento solo; corré "

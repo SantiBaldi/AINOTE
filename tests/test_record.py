@@ -110,3 +110,75 @@ class TestListarDispositivos(CasoConCarpetas):
         self.assertIn("Micrófono interno", salida)
         self.assertIn("Jabra Speak 510", salida)
         self.assertNotIn("Altavoces", salida)
+
+
+class TestNegociacionDeFormato(CasoConCarpetas):
+    """16 kHz mono es lo ideal, pero no todo micrófono lo acepta."""
+
+    def _grabar(self, **kw):
+        import time as _t
+        arranque = _t.monotonic()
+        original = record._tecla_de_corte
+        record._tecla_de_corte = lambda: _t.monotonic() - arranque > 0.4
+        self.addCleanup(setattr, record, "_tecla_de_corte", original)
+        with silencio() as salida:
+            return record.grabar(self.tmp / "audio" / "prueba.wav", **kw), salida.getvalue()
+
+    def test_el_caso_ideal_es_16k_mono(self):
+        instalar_sounddevice(self)
+        grabacion, _ = self._grabar()
+        self.assertEqual((grabacion.sample_rate, grabacion.canales), (16000, 1))
+
+    def test_mic_que_no_acepta_16k_cae_a_la_tasa_nativa_pero_sigue_mono(self):
+        instalar_sounddevice(self, acepta_16k=False)
+        grabacion, salida = self._grabar()
+        self.assertEqual((grabacion.sample_rate, grabacion.canales), (48000, 1))
+        self.assertIn("48000", salida)
+
+    def test_mic_que_no_acepta_mono_graba_en_estereo_a_16k(self):
+        # Antes esto reventaba con un error de PortAudio: se negociaba sólo el
+        # sample rate y los canales quedaban clavados en 1.
+        instalar_sounddevice(self, acepta_mono=False)
+        grabacion, salida = self._grabar()
+        self.assertEqual((grabacion.sample_rate, grabacion.canales), (16000, 2))
+        self.assertIn("canal", salida)
+
+    def test_mic_que_no_acepta_ni_una_cosa_ni_la_otra(self):
+        instalar_sounddevice(self, acepta_16k=False, acepta_mono=False)
+        grabacion, _ = self._grabar()
+        self.assertEqual((grabacion.sample_rate, grabacion.canales), (48000, 2))
+
+    def test_el_wav_declara_los_canales_reales(self):
+        import wave
+        instalar_sounddevice(self, acepta_mono=False)
+        grabacion, _ = self._grabar()
+        with wave.open(str(grabacion.ruta)) as w:
+            self.assertEqual(w.getnchannels(), 2)
+        # Y la duración tiene que contemplar que cada frame trae dos muestras.
+        with wave.open(str(grabacion.ruta)) as w:
+            self.assertAlmostEqual(grabacion.duracion,
+                                   w.getnframes() / w.getframerate(), places=3)
+
+    def test_dispositivo_inexistente_da_un_mensaje_en_castellano(self):
+        from src.deps import DependenciaFaltante
+        sd = instalar_sounddevice(self)
+
+        def explotar(dev=None, kind=None):
+            raise ValueError("error querying device -7")
+        sd.query_devices = explotar
+
+        with self.assertRaises(DependenciaFaltante) as caso, silencio():
+            record.grabar(self.tmp / "audio" / "prueba.wav", dispositivo=99)
+        self.assertIn("dispositivos", str(caso.exception))
+
+    def test_ningun_formato_aceptado_da_un_mensaje_en_castellano(self):
+        from src.deps import DependenciaFaltante
+        sd = instalar_sounddevice(self)
+
+        def rechazar_todo(**kw):
+            raise ValueError("nope")
+        sd.check_input_settings = rechazar_todo
+
+        with self.assertRaises(DependenciaFaltante) as caso, silencio():
+            record.grabar(self.tmp / "audio" / "prueba.wav")
+        self.assertIn("micrófono", str(caso.exception))

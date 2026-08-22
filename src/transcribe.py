@@ -28,7 +28,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import gpu, paths
+from . import gpu, lock, paths
 from .deps import whisper_model
 
 MODELO = "large-v3-turbo"
@@ -120,6 +120,15 @@ def transcribir(wav: Path, modelo: str = MODELO, compute_type: str = COMPUTE_TYP
     parcial = destino.with_suffix(".md.tmp")
     destino.parent.mkdir(parents=True, exist_ok=True)
 
+    # El cerrojo se toma antes de medir la VRAM: si hay otra transcripción en
+    # curso, la medición de este proceso no significaría nada.
+    with lock.transcripcion():
+        return _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo,
+                                        compute_type, device, con_json, umbral_vad)
+
+
+def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type,
+                             device, con_json, umbral_vad):
     if device == "cuda":
         gpu.exigir_vram(compute_type, f"Whisper {modelo}")
     libre_inicial = gpu.reporte("antes de cargar Whisper")

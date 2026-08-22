@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import gpu, paths, transcribe
+from . import gpu, lock, paths, transcribe
 from .deps import DependenciaFaltante
 
 COMPUTE_TYPES = ("float16", "int8_float16", "int8", "float32")
@@ -103,6 +103,11 @@ def cmd_transcribir(args: argparse.Namespace) -> int:
                                compute_type=args.compute_type, device=args.device,
                                con_json=not args.sin_json,
                                umbral_vad=args.umbral_vad)
+    except lock.Ocupado as error:
+        # Código propio: para el watcher esto no es un fallo del audio, sino un
+        # "volvé más tarde".
+        print(f"\n  {error}", file=sys.stderr)
+        return 4
     except gpu.VramInsuficiente as error:
         print(f"\n  VRAM insuficiente.\n  {error}", file=sys.stderr)
         return 2

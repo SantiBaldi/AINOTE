@@ -104,7 +104,8 @@ class _InputStreamFalso:
             self._hilo.join(timeout=2)
 
 
-def modulo_sounddevice(acepta_16k: bool = True) -> types.ModuleType:
+def modulo_sounddevice(acepta_16k: bool = True,
+                       acepta_mono: bool = True) -> types.ModuleType:
     sd = types.ModuleType("sounddevice")
     sd.default = types.SimpleNamespace(device=(0, 1))
     sd.InputStream = _InputStreamFalso
@@ -121,6 +122,8 @@ def modulo_sounddevice(acepta_16k: bool = True) -> types.ModuleType:
     def check_input_settings(**kw):
         if not acepta_16k and kw.get("samplerate") == 16000:
             raise ValueError("samplerate no soportado")
+        if not acepta_mono and kw.get("channels") == 1:
+            raise ValueError("el dispositivo no acepta mono")
 
     sd.query_devices = query_devices
     sd.check_input_settings = check_input_settings
@@ -193,8 +196,9 @@ class WhisperModelRoto(WhisperModelFalso):
         raise RuntimeError("CUDA se cayó a mitad de camino")
 
 
-def instalar_sounddevice(caso: unittest.TestCase, acepta_16k: bool = True):
-    modulo = modulo_sounddevice(acepta_16k)
+def instalar_sounddevice(caso: unittest.TestCase, acepta_16k: bool = True,
+                         acepta_mono: bool = True):
+    modulo = modulo_sounddevice(acepta_16k, acepta_mono)
     parche = mock.patch.dict(sys.modules, {"sounddevice": modulo})
     parche.start()
     caso.addCleanup(parche.stop)

@@ -19,7 +19,7 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
-from .deps import sounddevice
+from .deps import DependenciaFaltante, sounddevice
 from .paths import ms
 
 try:  # sólo existe en Windows, que es el entorno de destino
@@ -28,7 +28,7 @@ except ImportError:  # pragma: no cover - desarrollo en Linux
     msvcrt = None
 
 SAMPLE_RATE_DESEADO = 16000  # el que consume Whisper; evita un resampleo
-CANALES = 1
+CANALES_DESEADOS = 1         # mono: la mitad de disco, y a Whisper le da igual
 ANCHO_MUESTRA = 2  # int16
 BLOQUE = 1024
 
@@ -38,6 +38,7 @@ class Grabacion:
     ruta: Path
     duracion: float
     sample_rate: int
+    canales: int
     desbordes: int
 
 
@@ -65,21 +66,43 @@ def listar_dispositivos() -> str:
     return "\n".join(lineas)
 
 
-def _resolver_sample_rate(dispositivo, deseado: int) -> tuple[int, bool]:
-    """Devuelve `(sample_rate, hubo_fallback)`.
+def _negociar_formato(dispositivo, deseado: int) -> tuple[int, int]:
+    """Busca el mejor `(sample_rate, canales)` que el micrófono acepte.
 
-    Si el micrófono no acepta 16 kHz, se graba a su tasa nativa. No es un
-    problema: `faster-whisper` resamplea al decodificar. Sólo ocupa más disco.
+    16 kHz mono es lo ideal: es lo que consume Whisper y ocupa la mitad. Pero
+    hay entradas que no aceptan mono y otras que no aceptan 16 kHz, así que se
+    prueban las cuatro combinaciones de menor a mayor costo en disco. Cualquiera
+    sirve: `faster-whisper` resamplea y mezcla a mono al decodificar.
+
+    Antes esto sólo negociaba el sample rate, y un micrófono que rechazara mono
+    hacía fallar `InputStream` con un error de PortAudio en inglés.
     """
     sd = sounddevice()
 
     try:
-        sd.check_input_settings(device=dispositivo, channels=CANALES,
-                                dtype="int16", samplerate=deseado)
-        return deseado, False
-    except Exception:
         info = sd.query_devices(dispositivo, "input")
-        return int(info["default_samplerate"]), True
+    except Exception as error:
+        raise DependenciaFaltante(
+            f"No puedo usar el dispositivo de entrada {dispositivo!r}: {error}\n"
+            f"  Mirá cuáles hay con: python -m src dispositivos") from None
+
+    nativo = int(info["default_samplerate"])
+    maximo = int(info["max_input_channels"]) or 1
+    candidatos = [(deseado, CANALES_DESEADOS), (nativo, CANALES_DESEADOS),
+                  (deseado, maximo), (nativo, maximo)]
+
+    for sample_rate, canales in candidatos:
+        try:
+            sd.check_input_settings(device=dispositivo, channels=canales,
+                                    dtype="int16", samplerate=sample_rate)
+            return sample_rate, canales
+        except Exception:
+            continue
+
+    raise DependenciaFaltante(
+        f"El micrófono '{info['name']}' no acepta ninguna combinación usable "
+        f"(probé {deseado} y {nativo} Hz, 1 y {maximo} canales).\n"
+        f"  Probá otro con: python -m src dispositivos")
 
 
 def _tecla_de_corte() -> bool:
@@ -117,10 +140,11 @@ def grabar(destino: Path, dispositivo=None,
     """Graba del micrófono a `destino` hasta que se corte con una tecla."""
     sd = sounddevice()
 
-    sample_rate, fallback = _resolver_sample_rate(dispositivo, sample_rate)
-    if fallback:
-        print(f"  El micrófono no acepta {SAMPLE_RATE_DESEADO} Hz; "
-              f"grabo a {sample_rate} Hz (Whisper resamplea solo).")
+    pedido = sample_rate
+    sample_rate, canales = _negociar_formato(dispositivo, pedido)
+    if (sample_rate, canales) != (pedido, CANALES_DESEADOS):
+        print(f"  El micrófono no acepta {pedido} Hz mono; grabo a "
+              f"{sample_rate} Hz / {canales} canal(es). Whisper lo convierte solo.")
 
     cola: queue.Queue[bytes] = queue.Queue()
     desbordes = 0
@@ -135,7 +159,7 @@ def grabar(destino: Path, dispositivo=None,
     # Se construye antes de abrir el WAV: si el dispositivo es inválido, la
     # excepción sale sin dejar un archivo vacío en /audio/ que el watcher
     # después intentaría transcribir.
-    stream = sd.InputStream(samplerate=sample_rate, channels=CANALES,
+    stream = sd.InputStream(samplerate=sample_rate, channels=canales,
                             dtype="int16", device=dispositivo,
                             blocksize=BLOQUE, callback=callback)
 
@@ -143,14 +167,14 @@ def grabar(destino: Path, dispositivo=None,
     frames_escritos = 0
 
     with wave.open(str(destino), "wb") as wav:
-        wav.setnchannels(CANALES)
+        wav.setnchannels(canales)
         wav.setsampwidth(ANCHO_MUESTRA)
         wav.setframerate(sample_rate)
 
         def volcar(datos: bytes) -> None:
             nonlocal frames_escritos
             wav.writeframes(datos)
-            frames_escritos += len(datos) // (ANCHO_MUESTRA * CANALES)
+            frames_escritos += len(datos) // (ANCHO_MUESTRA * canales)
 
         print(f"  Grabando en {destino.name}. Hablá tranquilo.")
         try:
@@ -184,5 +208,5 @@ def grabar(destino: Path, dispositivo=None,
     duracion = frames_escritos / sample_rate if sample_rate else 0.0
     sys.stdout.write("\r" + " " * 60 + "\r")
     sys.stdout.flush()
-    return Grabacion(ruta=destino, duracion=duracion,
-                     sample_rate=sample_rate, desbordes=desbordes)
+    return Grabacion(ruta=destino, duracion=duracion, sample_rate=sample_rate,
+                     canales=canales, desbordes=desbordes)

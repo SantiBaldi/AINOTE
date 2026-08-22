@@ -102,7 +102,8 @@ class TestGrabar(CasoConCarpetas):
         from src import record
 
         grabacion = record.Grabacion(ruta=paths.ruta_audio("2026-08-22_perdidas"),
-                                     duracion=180.0, sample_rate=16000, desbordes=0)
+                                     duracion=180.0, sample_rate=16000,
+                                     canales=1, desbordes=0)
         with mock.patch.object(record, "grabar", return_value=grabacion), \
              mock.patch.object(cli.subprocess, "run") as correr:
             correr.return_value = mock.Mock(returncode=0)
@@ -116,7 +117,8 @@ class TestGrabar(CasoConCarpetas):
         from src import record
 
         grabacion = record.Grabacion(ruta=paths.ruta_audio("2026-08-22_perdidas"),
-                                     duracion=180.0, sample_rate=16000, desbordes=0)
+                                     duracion=180.0, sample_rate=16000,
+                                     canales=1, desbordes=0)
         with mock.patch.object(record, "grabar", return_value=grabacion), \
              mock.patch.object(cli.subprocess, "run") as correr:
             with silencio():
@@ -127,7 +129,8 @@ class TestGrabar(CasoConCarpetas):
         from src import record
 
         grabacion = record.Grabacion(ruta=paths.ruta_audio("2026-08-22_perdidas"),
-                                     duracion=0.0, sample_rate=16000, desbordes=0)
+                                     duracion=0.0, sample_rate=16000,
+                                     canales=1, desbordes=0)
         with mock.patch.object(record, "grabar", return_value=grabacion), \
              mock.patch.object(cli.subprocess, "run") as correr:
             with silencio() as salida:
@@ -143,7 +146,7 @@ class TestGrabar(CasoConCarpetas):
         def falso_grabar(destino, **kw):
             capturado["destino"] = destino
             return record.Grabacion(ruta=destino, duracion=10.0,
-                                    sample_rate=16000, desbordes=0)
+                                    sample_rate=16000, canales=1, desbordes=0)
 
         with mock.patch.object(record, "grabar", side_effect=falso_grabar), \
              mock.patch.object(cli.subprocess, "run",

@@ -9,7 +9,7 @@ class TestVigilar(CasoConCarpetas):
         super().setUp()
         self.llamadas = []
         self.ciclos = 0
-        self.exito = True
+        self.codigo = 0
         self.acciones = {}
 
         original_sleep = watch.time.sleep
@@ -29,9 +29,9 @@ class TestVigilar(CasoConCarpetas):
 
     def _subproceso(self, wav, extra):
         self.llamadas.append((wav.name, self.ciclos, tuple(extra)))
-        if self.exito:
+        if self.codigo == 0:
             paths.ruta_transcript(wav.stem).write_text("ok", encoding="utf-8")
-        return self.exito
+        return self.codigo
 
     def _correr(self, max_ciclos=5, extra=None):
         self.max_ciclos = max_ciclos
@@ -62,7 +62,7 @@ class TestVigilar(CasoConCarpetas):
 
     def test_un_fallo_no_se_reintenta_en_bucle(self):
         # Sin esto, un WAV corrupto haría girar el watcher para siempre.
-        self.exito = False
+        self.codigo = 1
         self.escribir_wav("2026-08-22_perdidas")
         self._correr(max_ciclos=8)
         self.assertEqual(len(self.llamadas), 1)
@@ -70,7 +70,7 @@ class TestVigilar(CasoConCarpetas):
     def test_un_fallo_no_frena_a_los_demas(self):
         self.escribir_wav("2026-08-22_perdidas")
         self.escribir_wav("2026-08-22_acr-l3")
-        self.exito = False
+        self.codigo = 1
         self._correr(max_ciclos=6)
         procesados = {nombre for nombre, _, _ in self.llamadas}
         self.assertEqual(len(procesados), 2)
@@ -90,3 +90,21 @@ class TestVigilar(CasoConCarpetas):
         self.escribir_wav("2026-08-22_perdidas")
         self._correr(max_ciclos=5, extra=["--compute-type", "int8_float16"])
         self.assertEqual(self.llamadas[0][2], ("--compute-type", "int8_float16"))
+
+
+class TestOcupado(TestVigilar):
+    """Un `4` significa que otra transcripción tiene la GPU, no que el audio esté roto."""
+
+    def test_reintenta_cuando_la_gpu_estaba_ocupada(self):
+        self.codigo = watch.OCUPADO
+        self.escribir_wav("2026-08-22_perdidas")
+        self._correr(max_ciclos=8)
+        self.assertGreater(len(self.llamadas), 1,
+                           "un 'ocupado' no debe descartar el audio para siempre")
+
+    def test_al_liberarse_la_gpu_lo_transcribe(self):
+        self.codigo = watch.OCUPADO
+        self.escribir_wav("2026-08-22_perdidas")
+        self.acciones = {3: lambda: setattr(self, "codigo", 0)}
+        self._correr(max_ciclos=9)
+        self.assertTrue(paths.ruta_transcript("2026-08-22_perdidas").exists())
