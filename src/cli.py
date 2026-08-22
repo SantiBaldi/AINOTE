@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from . import gpu, lock, paths, transcribe
+from . import deps
 from .deps import DependenciaFaltante
 
 COMPUTE_TYPES = ("float16", "int8_float16", "int8", "float32")
@@ -131,16 +132,22 @@ def cmd_dispositivos(args: argparse.Namespace) -> int:
 
 
 def cmd_gpu(args: argparse.Namespace) -> int:
+    """Diagnóstico: VRAM y librerías de CUDA. Lo segundo se informa siempre,
+    aunque no haya `nvidia-smi`: son dos fallas independientes."""
     medicion = gpu.consultar()
     if medicion is None:
         print("  No pude leer la VRAM: no encuentro nvidia-smi.", file=sys.stderr)
-        return 1
-    libre, total = medicion
-    print(f"  VRAM: {libre} MB libres de {total} MB ({total - libre} MB en uso)")
-    for tipo, minimo in gpu.VRAM_MINIMA_MB.items():
-        estado = "entra" if libre >= minimo else "NO entra"
-        print(f"    Whisper {tipo:<13} necesita {minimo:>5} MB  ->  {estado}")
-    return 0
+    else:
+        libre, total = medicion
+        print(f"  VRAM: {libre} MB libres de {total} MB ({total - libre} MB en uso)")
+        for tipo, minimo in gpu.VRAM_MINIMA_MB.items():
+            estado = "entra" if libre >= minimo else "NO entra"
+            print(f"    Whisper {tipo:<13} necesita {minimo:>5} MB  ->  {estado}")
+
+    print("\n  Librerías de CUDA:")
+    for linea in deps.diagnostico_cuda():
+        print(linea)
+    return 0 if medicion else 1
 
 
 def construir_parser() -> argparse.ArgumentParser:

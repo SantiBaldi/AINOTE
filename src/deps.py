@@ -117,3 +117,66 @@ def whisper_model():
             f"Falta 'faster-whisper', que es el motor de transcripción.\n"
             f"  {_INSTALAR}") from None
     return WhisperModel
+
+
+# DLLs que ctranslate2 carga en tiempo de ejecución, por librería.
+_DLLS_ESPERADOS = {"cublas": "cublas64_12.dll", "cudnn": "cudnn*.dll"}
+
+
+def diagnostico_cuda() -> list[str]:
+    """Estado de las librerías de CUDA, para el comando `gpu`.
+
+    Distingue los dos fallos que dan el mismo síntoma: que el paquete no esté
+    instalado, y que esté pero Windows no encuentre sus DLLs.
+    """
+    lineas = []
+    try:
+        import nvidia
+        raices = list(nvidia.__path__)
+    except ImportError:
+        raices = []
+
+    if not raices:
+        lineas.append("    No hay librerías de CUDA instaladas por pip.")
+        lineas.append("    Si CUDA te funciona igual, tenés el Toolkit del sistema.")
+        lineas.append("    Si no, instalalas con: pip install -r requirements.txt")
+        return lineas
+
+    carpetas = _carpetas_dll_cuda()
+    if not carpetas:
+        lineas.append(f"    El paquete 'nvidia' está en {raices[0]}")
+        lineas.append("    pero no tiene ninguna carpeta */bin con DLLs adentro.")
+        return lineas
+
+    for carpeta in carpetas:
+        dlls = sorted(p.name for p in carpeta.glob("*.dll"))
+        sos = sorted(p.name for p in carpeta.parent.glob("lib/*.so*"))
+        cuantos = len(dlls) or len(sos)
+        lineas.append(f"    {carpeta.parent.name:<10} {cuantos} archivo(s) en {carpeta}")
+
+    registradas = registrar_dlls_cuda()
+    if hasattr(os, "add_dll_directory"):
+        lineas.append(f"    {registradas} carpeta(s) agregadas a la ruta de búsqueda.")
+        lineas.extend(_probar_carga())
+    else:
+        lineas.append("    (fuera de Windows no hace falta registrarlas)")
+    return lineas
+
+
+def _probar_carga() -> list[str]:
+    """Intenta cargar de verdad los DLLs. Es la única prueba que vale."""
+    import ctypes
+
+    lineas = []
+    for carpeta in _carpetas_dll_cuda():
+        for dll in sorted(carpeta.glob("*.dll")):
+            if not any(dll.name.startswith(p) for p in ("cublas64", "cudnn64", "cudnn_ops")):
+                continue
+            try:
+                ctypes.WinDLL(str(dll))
+                lineas.append(f"    OK    {dll.name}")
+            except OSError as error:
+                lineas.append(f"    FALLA {dll.name}: {error}")
+    if not lineas:
+        lineas.append("    No encontré cublas64_*.dll ni cudnn*.dll para probar.")
+    return lineas

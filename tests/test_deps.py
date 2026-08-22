@@ -82,3 +82,36 @@ class TestDllsDeCuda(unittest.TestCase):
         # Un OOM de CUDA o un modelo corrupto no se arreglan instalando nada.
         for ajeno in ("CUDA out of memory", "invalid model file", "no kernel image"):
             self.assertIsNone(deps.traducir_error_de_dll(RuntimeError(ajeno)))
+
+
+class TestDiagnostico(unittest.TestCase):
+    def test_sin_librerias_dice_como_instalarlas(self):
+        with _sin_modulo("nvidia"):
+            texto = "\n".join(deps.diagnostico_cuda())
+        self.assertIn("requirements.txt", texto)
+
+    def test_con_librerias_lista_las_carpetas(self):
+        import sys, tempfile, types
+        from pathlib import Path
+
+        raiz = Path(tempfile.mkdtemp(prefix="nvidia-falso-"))
+        (raiz / "cublas" / "bin").mkdir(parents=True)
+        (raiz / "cublas" / "bin" / "cublas64_12.dll").write_bytes(b"")
+
+        falso = types.ModuleType("nvidia")
+        falso.__path__ = [str(raiz)]
+        with mock.patch.dict(sys.modules, {"nvidia": falso}):
+            texto = "\n".join(deps.diagnostico_cuda())
+        self.assertIn("cublas", texto)
+        self.assertNotIn("requirements.txt", texto)
+
+    def test_paquete_sin_dlls_lo_dice(self):
+        import sys, tempfile, types
+        from pathlib import Path
+
+        raiz = Path(tempfile.mkdtemp(prefix="nvidia-vacio-"))
+        falso = types.ModuleType("nvidia")
+        falso.__path__ = [str(raiz)]
+        with mock.patch.dict(sys.modules, {"nvidia": falso}):
+            texto = "\n".join(deps.diagnostico_cuda())
+        self.assertIn("no tiene ninguna carpeta", texto)
