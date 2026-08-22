@@ -194,8 +194,9 @@ def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type
 
         sys.stdout.write("\r" + " " * 70 + "\r")
         os.replace(parcial, destino)
+        plural = "segmento" if contador == 1 else "segmentos"
         print(f"  Transcripción lista: {paths.relativa(destino)} "
-              f"({contador} segmentos)")
+              f"({contador} {plural})")
 
         if con_json:
             ruta_json = paths.ruta_segmentos(nombre)

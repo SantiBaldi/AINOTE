@@ -211,3 +211,19 @@ class TestErroresDeCuda(CasoConCarpetas):
         with self.assertRaises(DependenciaFaltante):
             self._correr(SinCublas)
         self.assertTrue(WhisperModelFalso.ultima_instancia.descargado)
+
+
+class TestMensajes(CasoConCarpetas):
+    def test_no_dice_1_segmentos(self):
+        from tests.dobles import _Info, _Palabra, _Segmento
+
+        class UnSoloSegmento(WhisperModelFalso):
+            def transcribe(self, ruta, **kw):
+                palabras = [_Palabra(0.1, 1.0, "hola")]
+                return iter([_Segmento(0.1, 1.0, " Hola.", palabras)]), _Info(1.0)
+
+        instalar_whisper(self, UnSoloSegmento)
+        with silencio() as salida:
+            transcribe.transcribir(self.escribir_wav("2026-08-22_x"), device="cpu")
+        self.assertIn("(1 segmento)", salida.getvalue())
+        self.assertNotIn("1 segmentos", salida.getvalue())
