@@ -158,3 +158,56 @@ class TestGlosario(CasoConCarpetas):
 
     def test_archivo_ausente_da_vacio(self):
         self.assertEqual(transcribe.cargar_glosario(), "")
+
+
+class TestErroresDeCuda(CasoConCarpetas):
+    """Un DLL de CUDA ausente tiene que explicar cómo conseguirlo."""
+
+    def _correr(self, clase):
+        instalar_whisper(self, clase)
+        wav = self.escribir_wav("2026-08-22_perdidas")
+        with silencio():
+            return transcribe.transcribir(wav, device="cuda")
+
+    def test_dll_ausente_al_transcribir_se_traduce(self):
+        from src.deps import DependenciaFaltante
+
+        class SinCublas(WhisperModelFalso):
+            def transcribe(self, ruta, **kw):
+                raise RuntimeError(
+                    "Library cublas64_12.dll is not found or cannot be loaded")
+
+        with self.assertRaises(DependenciaFaltante) as caso:
+            self._correr(SinCublas)
+        self.assertIn("nvidia-cublas-cu12", str(caso.exception))
+
+    def test_dll_ausente_al_cargar_el_modelo_se_traduce(self):
+        from src.deps import DependenciaFaltante
+
+        class NoCarga(WhisperModelFalso):
+            def __init__(self, *a, **kw):
+                raise RuntimeError("Library cudnn_ops64_9.dll is not found")
+
+        with self.assertRaises(DependenciaFaltante) as caso:
+            self._correr(NoCarga)
+        self.assertIn("nvidia-cudnn-cu12", str(caso.exception))
+
+    def test_un_oom_no_se_disfraza_de_dependencia_faltante(self):
+        class SinMemoria(WhisperModelFalso):
+            def transcribe(self, ruta, **kw):
+                raise RuntimeError("CUDA failed with error out of memory")
+
+        with self.assertRaises(RuntimeError) as caso:
+            self._correr(SinMemoria)
+        self.assertIn("out of memory", str(caso.exception))
+
+    def test_el_dll_ausente_igual_descarga_el_modelo(self):
+        from src.deps import DependenciaFaltante
+
+        class SinCublas(WhisperModelFalso):
+            def transcribe(self, ruta, **kw):
+                raise RuntimeError("Library cublas64_12.dll is not found")
+
+        with self.assertRaises(DependenciaFaltante):
+            self._correr(SinCublas)
+        self.assertTrue(WhisperModelFalso.ultima_instancia.descargado)

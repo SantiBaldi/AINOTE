@@ -14,3 +14,15 @@ sounddevice>=0.4.6
 
 # Entra igual como dependencia de ctranslate2; lo fijamos explicito.
 numpy>=1.24
+
+# --- CUDA ---------------------------------------------------------------
+# ctranslate2 necesita cuBLAS y cuDNN. Normalmente los trae el CUDA Toolkit,
+# que pide permisos de administrador; estos wheels son la via sin admin.
+# Pesan varios cientos de MB. Si ya tenes el Toolkit instalado y funcionando,
+# podes comentarlos.
+#
+# En Windows no alcanza con instalarlos: los DLLs quedan dentro de
+# site-packages, que no esta en la ruta de busqueda. `src/deps.py` los
+# registra con os.add_dll_directory antes de importar faster-whisper.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12

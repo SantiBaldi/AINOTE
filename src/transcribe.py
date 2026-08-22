@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import gpu, lock, paths
-from .deps import whisper_model
+from .deps import traducir_error_de_dll, whisper_model
 
 MODELO = "large-v3-turbo"
 COMPUTE_TYPE = "float16"
@@ -137,7 +137,10 @@ def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type
     WhisperModel = whisper_model()
 
     print(f"  Cargando {modelo} ({compute_type}) en {device}...")
-    model = WhisperModel(modelo, device=device, compute_type=compute_type)
+    try:
+        model = WhisperModel(modelo, device=device, compute_type=compute_type)
+    except RuntimeError as error:
+        raise traducir_error_de_dll(error) or error from None
 
     # A partir de acá hay pesos en la GPU: todo va dentro del try/finally para
     # que ningún camino de error se saltee la descarga.
@@ -205,6 +208,10 @@ def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type
                 encoding="utf-8")
             print(f"  Índice de segmentos: {paths.relativa(ruta_json)}")
 
+    except RuntimeError as error:
+        # ctranslate2 carga cuBLAS y cuDNN de forma perezosa, al codificar el
+        # primer bloque: el DLL ausente recién se nota acá, no al construir.
+        raise traducir_error_de_dll(error) or error from None
     finally:
         parcial.unlink(missing_ok=True)
         _descargar(model)

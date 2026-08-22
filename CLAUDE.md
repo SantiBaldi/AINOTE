@@ -257,5 +257,12 @@ python -m src gpu             # VRAM libre (diagnóstico)
 - **`hotwords` sobre `initial_prompt`.** `initial_prompt` no sobrevive a
   `condition_on_previous_text=False`; `hotwords` se aplica en todos los bloques.
   La jerga vive en `glosario.txt`, editable, no hardcodeada.
+- **CUDA sin Toolkit.** `ctranslate2` necesita cuBLAS y cuDNN. El CUDA Toolkit
+  pide administrador, así que van por pip (`nvidia-cublas-cu12`,
+  `nvidia-cudnn-cu12`). En Windows **no alcanza con instalarlos**: los DLLs
+  quedan en `site-packages/nvidia/*/bin`, que no está en la ruta de búsqueda, y
+  `ctranslate2` falla con "Library cublas64_12.dll is not found" igual.
+  `deps.registrar_dlls_cuda()` los agrega con `os.add_dll_directory` antes de
+  importar `faster-whisper`. En Linux es un no-op: ahí los encuentra por RPATH.
 - **Modelos offline.** Primera descarga a `HF_HOME`. Después de la primera
   corrida, `HF_HUB_OFFLINE=1` garantiza que nunca más toque la red.
