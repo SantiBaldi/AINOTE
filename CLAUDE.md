@@ -220,10 +220,21 @@ python -m src gpu             # VRAM libre (diagnóstico)
 
 ## 8. Notas para quien programe acá
 
-- **El código no se puede probar en el entorno de desarrollo remoto**: no hay
-  GPU ni placa de audio. Todo lo de CUDA, PortAudio y `msvcrt` se valida en la
-  notebook. Por eso: fallar temprano, con mensajes en castellano, y mantener
+- **El código no se puede probar del todo en el entorno de desarrollo remoto**:
+  no hay GPU ni placa de audio. Por eso: fallar temprano, con mensajes en
+  castellano (`src/deps.py` para dependencias ausentes), y mantener
   `dispositivos` y `gpu` como comandos de diagnóstico aislados.
+- **Lo que sí se puede probar, se prueba.** `tests/` reemplaza `sounddevice` y
+  `faster-whisper` por dobles (`tests/dobles.py`) y verifica toda la lógica sin
+  GPU ni micrófono: `python -m unittest discover -s tests -t .`. Al tocar
+  cualquier cosa de `src/`, correrlos antes de dar nada por hecho. Queda fuera
+  de su alcance, y sólo se valida en la notebook: que CUDA levante el modelo,
+  que PortAudio vea el micrófono, que `msvcrt` corte con Enter, y el error real
+  de los timestamps.
+- **Los dobles imitan la API real, no una versión conveniente.** Si un test
+  falla, primero descartar que el error esté en el doble: `query_devices(None,
+  'input')` devuelve el dispositivo por defecto, no la lista — ese fue un bug
+  del doble que se hizo pasar por un bug del código.
 - **Escritura incremental siempre.** El WAV se escribe bloque a bloque y el
   transcript línea a línea. Si el proceso muere a los 50 minutos, quedan 50
   minutos de audio válido. Nunca acumular una reunión entera en RAM.

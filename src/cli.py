@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from . import gpu, paths, transcribe
+from .deps import DependenciaFaltante
 
 COMPUTE_TYPES = ("float16", "int8_float16", "int8", "float32")
 
@@ -182,6 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     args = construir_parser().parse_args(argv)
     try:
         return args.func(args)
+    except DependenciaFaltante as error:
+        print(f"\n  {error}", file=sys.stderr)
+        return 3
     except KeyboardInterrupt:
         print("\n  Cancelado.", file=sys.stderr)
         return 130

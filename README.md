@@ -88,6 +88,22 @@ wifi y transcribí. Tiene que andar igual.
 
 ---
 
+## Correr las pruebas
+
+```bat
+python -m unittest discover -s tests -t .
+```
+
+No necesitan GPU, micrófono ni internet: `sounddevice` y `faster-whisper` se
+reemplazan por dobles. Corren en cualquier máquina y tardan unos segundos.
+
+Cubren el bucle de grabación, el formato del transcript, la convención de
+nombres, la verificación de VRAM y la lógica del watcher. **No cubren** —y sólo
+se puede probar en la notebook— que CUDA levante el modelo, que PortAudio vea el
+micrófono, y el error real de los timestamps.
+
+---
+
 ## Si algo falla
 
 | Síntoma | Qué mirar |

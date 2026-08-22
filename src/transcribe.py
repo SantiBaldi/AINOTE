@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import gpu, paths
+from .deps import whisper_model
 
 MODELO = "large-v3-turbo"
 COMPUTE_TYPE = "float16"
@@ -123,7 +124,8 @@ def transcribir(wav: Path, modelo: str = MODELO, compute_type: str = COMPUTE_TYP
         gpu.exigir_vram(compute_type, f"Whisper {modelo}")
     libre_inicial = gpu.reporte("antes de cargar Whisper")
 
-    from faster_whisper import WhisperModel  # import tardío: no cargar CUDA en --help
+    # Import tardío a propósito: `--help` no tiene por qué cargar CUDA.
+    WhisperModel = whisper_model()
 
     print(f"  Cargando {modelo} ({compute_type}) en {device}...")
     model = WhisperModel(modelo, device=device, compute_type=compute_type)

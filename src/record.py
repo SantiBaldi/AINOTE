@@ -19,6 +19,7 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
+from .deps import sounddevice
 from .paths import ms
 
 try:  # sólo existe en Windows, que es el entorno de destino
@@ -42,7 +43,7 @@ class Grabacion:
 
 def listar_dispositivos() -> str:
     """Tabla de entradas de audio disponibles, para elegir el micrófono."""
-    import sounddevice as sd
+    sd = sounddevice()
 
     lineas = ["Dispositivos de entrada disponibles:", ""]
     try:
@@ -70,7 +71,7 @@ def _resolver_sample_rate(dispositivo, deseado: int) -> tuple[int, bool]:
     Si el micrófono no acepta 16 kHz, se graba a su tasa nativa. No es un
     problema: `faster-whisper` resamplea al decodificar. Sólo ocupa más disco.
     """
-    import sounddevice as sd
+    sd = sounddevice()
 
     try:
         sd.check_input_settings(device=dispositivo, channels=CANALES,
@@ -114,7 +115,7 @@ def _pintar_cronometro(transcurrido: float) -> None:
 def grabar(destino: Path, dispositivo=None,
            sample_rate: int = SAMPLE_RATE_DESEADO) -> Grabacion:
     """Graba del micrófono a `destino` hasta que se corte con una tecla."""
-    import sounddevice as sd
+    sd = sounddevice()
 
     sample_rate, fallback = _resolver_sample_rate(dispositivo, sample_rate)
     if fallback:
