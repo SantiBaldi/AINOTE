@@ -204,10 +204,38 @@ No re-litigar en sesiones futuras:
   concatenado por el VAD y después remapea; ese remapeo falló para una palabra.
   Partir por huecos no ayuda: no hay hueco que ver donde Whisper no lo reporta.
   Por eso existe `--sin-vad`, que es más lento pero toma los timestamps
-  directos del audio, sin remapeo. **Cuál conviene por defecto es una decisión
-  abierta**, a resolver comparando ambos modos sobre una reunión real. El
-  front-matter guarda `vad: si|no` para que dos transcripciones del mismo audio
-  se puedan comparar.
+  directos del audio, sin remapeo. El front-matter guarda `vad: si|no` para que
+  dos transcripciones del mismo audio se puedan comparar.
+
+### Medición de ambos modos (mismo audio, notebook, 22-08-2026)
+
+Cinco números dichos mirando un cronómetro, uno cada 10 s, con silencio entre
+medio. Error respecto del momento real (negativo = el timestamp cae antes):
+
+| Dicho a los | Con VAD | Sin VAD |
+|---|---|---|
+| 10 s | +0,06 | −0,84 |
+| 20 s | +0,28 | −1,02 |
+| 30 s | **−9** | −1,96 |
+| 40 s | −0,11 | −0,72 |
+| 50 s | +0,16 | −0,66 |
+
+Lo que dicen estos números:
+
+- **Con VAD**: ±0,3 s cuando el remapeo funciona, catastrófico cuando falla.
+  El modo de falla es el peor posible para el objetivo del proyecto.
+- **Sin VAD**: nunca falla feo, pero tiene un sesgo sistemático de ~1 s hacia
+  atrás. Los cinco segmentos duraron exactamente 1,40 s, cuando decir "diez"
+  lleva medio segundo: Whisper estira el arranque hacia atrás. **Ese sesgo es
+  benigno para saltar al audio**: se cae un segundo antes y se escucha la frase
+  entera.
+- Sin VAD **no alucinó nada** en 43 s de silencio, que era el riesgo principal
+  de sacarlo. Pero era silencio limpio de oficina, no ruido de planta.
+
+**Sigue siendo una decisión abierta**, y lo que falta medir sólo sale de una
+reunión real: cuántas frases inventa sin VAD con ruido de máquinas de fondo, y
+cuánto más tarda en una hora de audio. La evidencia hasta acá favorece
+`--sin-vad`; el default no se cambió porque falta ese dato.
 - **`condition_on_previous_text=False`.** Whisper entra en bucles de repetición
   con audio ruidoso; deshabilitar el arrastre de contexto lo corta.
 
