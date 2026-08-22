@@ -43,6 +43,20 @@ aparte.
 
 ## Uso
 
+Doble clic en **`grabar.bat`**: pide el nombre de la reunión, graba, y al cortar
+con Enter transcribe sola. Es todo lo que hace falta para una reunión.
+
+Para la consola, doble clic en **`ainote.bat`** abre una ya ubicada en el
+proyecto y con el entorno activado. Sin eso hay que hacer los dos pasos a mano
+cada vez, porque una consola nueva arranca en la carpeta del usuario:
+
+```bat
+cd %USERPROFILE%\Documents\AINOTE
+.venv\Scripts\activate
+```
+
+Después:
+
 ```bat
 python -m src grabar
 ```
