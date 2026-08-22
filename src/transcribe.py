@@ -41,6 +41,13 @@ PADDING_MS = 400        # margen alrededor de cada bloque, para no comer arranqu
 SILENCIO_MIN_MS = 500   # silencio mínimo para considerar un corte
 UMBRAL_VAD = 0.5
 
+# Hueco entre palabras a partir del cual se corta la línea. El VAD saca los
+# silencios antes de que Whisper vea el audio, así que un segmento puede juntar
+# frases separadas por decenas de segundos de reloj: el timestamp de inicio
+# queda bien, pero la línea abarca todo ese rango y saltar al audio desde ella
+# no sirve. Se parte con las palabras, que sí conservan el tiempo real.
+HUECO_MAXIMO_S = 1.5
+
 LIMITE_HOTWORDS = 400   # el prompt de Whisper tope 224 tokens; no lo llenamos
 
 
@@ -73,19 +80,33 @@ def cargar_glosario(ruta: Path | None = None) -> str:
     return texto
 
 
-def _inicio_de(segmento) -> float:
-    """Inicio de la primera palabra; cae al del segmento si no hay palabras."""
-    palabras = getattr(segmento, "words", None)
-    if palabras:
-        return float(palabras[0].start)
-    return float(segmento.start)
+def partir_por_huecos(segmento, hueco_max: float = HUECO_MAXIMO_S
+                      ) -> list[tuple[float, float, str]]:
+    """Parte un segmento en donde haya un silencio largo entre sus palabras.
 
+    Devuelve `[(inicio, fin, texto), ...]`. Sin palabras —o sin huecos— sale un
+    solo trozo, equivalente al segmento original.
 
-def _fin_de(segmento) -> float:
-    palabras = getattr(segmento, "words", None)
-    if palabras:
-        return float(palabras[-1].end)
-    return float(segmento.end)
+    Los tiempos salen siempre de las palabras: el `start` del segmento derrapa
+    y es justo lo que rompe el objetivo de menos de 2 s de error.
+    """
+    palabras = [p for p in (getattr(segmento, "words", None) or []) if p.word.strip()]
+    if not palabras:
+        texto = segmento.text.strip()
+        return [(float(segmento.start), float(segmento.end), texto)] if texto else []
+
+    grupos = [[palabras[0]]]
+    for anterior, palabra in zip(palabras, palabras[1:]):
+        if float(palabra.start) - float(anterior.end) > hueco_max:
+            grupos.append([])
+        grupos[-1].append(palabra)
+
+    trozos = []
+    for grupo in grupos:
+        texto = "".join(p.word for p in grupo).strip()
+        if texto:
+            trozos.append((float(grupo[0].start), float(grupo[-1].end), texto))
+    return trozos
 
 
 def _front_matter(nombre: str, wav: Path, duracion: float,
@@ -105,7 +126,8 @@ def _front_matter(nombre: str, wav: Path, duracion: float,
 
 def transcribir(wav: Path, modelo: str = MODELO, compute_type: str = COMPUTE_TYPE,
                 device: str = DEVICE, con_json: bool = True,
-                umbral_vad: float = UMBRAL_VAD) -> Path:
+                umbral_vad: float = UMBRAL_VAD,
+                hueco_max: float = HUECO_MAXIMO_S) -> Path:
     """Transcribe `wav` y devuelve la ruta del `.md` generado."""
     if not wav.exists():
         raise FileNotFoundError(f"No encuentro el audio: {wav}")
@@ -124,11 +146,12 @@ def transcribir(wav: Path, modelo: str = MODELO, compute_type: str = COMPUTE_TYP
     # curso, la medición de este proceso no significaría nada.
     with lock.transcripcion():
         return _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo,
-                                        compute_type, device, con_json, umbral_vad)
+                                        compute_type, device, con_json, umbral_vad,
+                                        hueco_max)
 
 
 def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type,
-                             device, con_json, umbral_vad):
+                             device, con_json, umbral_vad, hueco_max):
     if device == "cuda":
         gpu.exigir_vram(compute_type, f"Whisper {modelo}")
     libre_inicial = gpu.reporte("antes de cargar Whisper")
@@ -181,16 +204,13 @@ def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type
             salida.write(_front_matter(nombre, wav, duracion, modelo, compute_type))
             contador = 0
             for segmento in segmentos:
-                texto = segmento.text.strip()
-                if not texto:
-                    continue
-                inicio, fin = _inicio_de(segmento), _fin_de(segmento)
-                salida.write(f"[{paths.hms(inicio)}] {texto}\n")
-                salida.flush()
-                segmentos_json.append({"i": contador, "inicio": round(inicio, 3),
-                                       "fin": round(fin, 3), "texto": texto})
-                contador += 1
-                _avance(fin, duracion)
+                for inicio, fin, texto in partir_por_huecos(segmento, hueco_max):
+                    salida.write(f"[{paths.hms(inicio)}] {texto}\n")
+                    salida.flush()
+                    segmentos_json.append({"i": contador, "inicio": round(inicio, 3),
+                                           "fin": round(fin, 3), "texto": texto})
+                    contador += 1
+                    _avance(fin, duracion)
 
         sys.stdout.write("\r" + " " * 70 + "\r")
         os.replace(parcial, destino)

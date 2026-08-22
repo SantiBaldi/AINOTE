@@ -186,8 +186,17 @@ No re-litigar en sesiones futuras:
   Implementar el solape literal exigiría deduplicar texto entre ventanas, que
   con Whisper duplica o come frases y ensucia los timestamps.
 - **Timestamps desde palabras, no desde segmentos.** `word_timestamps=True` y
-  se usa el inicio de la primera palabra del segmento. El timestamp de segmento
-  derrapa y rompe el objetivo de <2 s de error.
+  se usa el inicio de la primera palabra. El timestamp de segmento derrapa y
+  rompe el objetivo de <2 s de error. Verificado en la notebook: diciendo un
+  número por segundo conocido, el error fue de **0,06 s**.
+- **Las líneas se parten por huecos entre palabras** (`partir_por_huecos`,
+  1,5 s por defecto). El VAD elimina los silencios *antes* de que Whisper vea
+  el audio, así que Whisper puede juntar en un segmento frases separadas por
+  decenas de segundos de reloj: el inicio queda bien, pero la línea abarca todo
+  ese rango. Medido en la notebook: cinco números dichos con 10 s de silencio
+  entre medio salieron como **una sola línea de 10,06 a 50,74**. Como
+  `word_timestamps` ya está activo, partir por los huecos reales cuesta nada y
+  es lo que hace utilizable el salto al audio de la Fase 2.
 - **`condition_on_previous_text=False`.** Whisper entra en bucles de repetición
   con audio ruidoso; deshabilitar el arrastre de contexto lo corta.
 

@@ -1,6 +1,8 @@
 """Transcripción: formato del .md, timestamps y descarga del modelo."""
 
 import json
+import types
+import unittest
 
 from src import paths, transcribe
 from tests.dobles import (DURACION, CasoConCarpetas, WhisperModelFalso,
@@ -227,3 +229,85 @@ class TestMensajes(CasoConCarpetas):
             transcribe.transcribir(self.escribir_wav("2026-08-22_x"), device="cpu")
         self.assertIn("(1 segmento)", salida.getvalue())
         self.assertNotIn("1 segmentos", salida.getvalue())
+
+
+class TestPartirPorHuecos(unittest.TestCase):
+    """El VAD saca los silencios, así que un segmento puede abarcar minutos."""
+
+    @staticmethod
+    def _seg(texto, palabras, inicio=None, fin=None):
+        objetos = [types.SimpleNamespace(start=a, end=b, word=w) for a, b, w in palabras]
+        return types.SimpleNamespace(
+            start=inicio if inicio is not None else (objetos[0].start if objetos else 0.0),
+            end=fin if fin is not None else (objetos[-1].end if objetos else 0.0),
+            text=texto, words=objetos)
+
+    def test_el_caso_real_de_la_notebook(self):
+        # Un número cada 10 s con silencio entre medio: Whisper devolvía una
+        # sola línea de 10.06 a 50.74 y saltar al audio desde ella era inútil.
+        segmento = self._seg(" 10, 20, 30, 40, 50",
+                             [(10.06, 10.6, " 10,"), (20.1, 20.7, " 20,"),
+                              (30.2, 30.8, " 30,"), (40.1, 40.7, " 40,"),
+                              (50.1, 50.74, " 50")])
+        trozos = transcribe.partir_por_huecos(segmento)
+        self.assertEqual(len(trozos), 5)
+        self.assertEqual([round(t[0]) for t in trozos], [10, 20, 30, 40, 50])
+        self.assertEqual(trozos[0][2], "10,")
+
+    def test_una_frase_corrida_no_se_parte(self):
+        segmento = self._seg(" Buenas, arrancamos.",
+                             [(0.1, 0.6, " Buenas,"), (0.7, 1.4, " arrancamos.")])
+        trozos = transcribe.partir_por_huecos(segmento)
+        self.assertEqual(len(trozos), 1)
+        self.assertEqual(trozos[0][2], "Buenas, arrancamos.")
+
+    def test_respeta_el_umbral(self):
+        segmento = self._seg(" a b", [(0.0, 0.5, " a"), (2.5, 3.0, " b")])
+        self.assertEqual(len(transcribe.partir_por_huecos(segmento, 1.5)), 2)
+        self.assertEqual(len(transcribe.partir_por_huecos(segmento, 3.0)), 1)
+
+    def test_los_tiempos_salen_de_las_palabras(self):
+        # El start del segmento derrapa; el de la primera palabra no.
+        segmento = self._seg(" hola", [(5.5, 6.0, " hola")], inicio=3.0, fin=9.0)
+        inicio, fin, _ = transcribe.partir_por_huecos(segmento)[0]
+        self.assertEqual((inicio, fin), (5.5, 6.0))
+
+    def test_sin_palabras_cae_al_segmento(self):
+        segmento = types.SimpleNamespace(start=1.0, end=2.0, text=" hola", words=None)
+        self.assertEqual(transcribe.partir_por_huecos(segmento), [(1.0, 2.0, "hola")])
+
+    def test_un_segmento_vacio_no_produce_lineas(self):
+        segmento = types.SimpleNamespace(start=1.0, end=2.0, text="   ", words=[])
+        self.assertEqual(transcribe.partir_por_huecos(segmento), [])
+
+    def test_ignora_palabras_en_blanco(self):
+        segmento = self._seg(" a b", [(0.0, 0.5, " a"), (0.6, 0.7, "  "),
+                                      (0.8, 1.0, " b")])
+        trozos = transcribe.partir_por_huecos(segmento)
+        self.assertEqual(len(trozos), 1)
+        self.assertEqual(trozos[0][2], "a b")
+
+    def test_los_trozos_quedan_en_orden_y_sin_solaparse(self):
+        segmento = self._seg(" a b c", [(0.0, 0.5, " a"), (5.0, 5.5, " b"),
+                                        (9.0, 9.5, " c")])
+        trozos = transcribe.partir_por_huecos(segmento)
+        for anterior, siguiente in zip(trozos, trozos[1:]):
+            self.assertLessEqual(anterior[1], siguiente[0])
+
+
+class TestHuecosEnElArchivo(CasoConCarpetas):
+    def test_una_pausa_larga_genera_dos_lineas(self):
+        from tests.dobles import _Info, _Palabra, _Segmento
+
+        class ConPausa(WhisperModelFalso):
+            def transcribe(self, ruta, **kw):
+                palabras = [_Palabra(1.0, 1.5, " Uno."), _Palabra(31.0, 31.5, " Dos.")]
+                return iter([_Segmento(1.0, 31.5, " Uno. Dos.", palabras)]), _Info(40.0)
+
+        instalar_whisper(self, ConPausa)
+        with silencio():
+            destino = transcribe.transcribir(self.escribir_wav("2026-08-22_x"),
+                                             device="cpu")
+        lineas = [l for l in destino.read_text(encoding="utf-8").splitlines()
+                  if l.startswith("[")]
+        self.assertEqual(lineas, ["[00:00:01] Uno.", "[00:00:31] Dos."])

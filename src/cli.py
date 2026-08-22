@@ -31,6 +31,9 @@ def _opciones_transcripcion(sub: argparse.ArgumentParser) -> None:
                      help="cpu sirve para probar sin GPU, pero es lentísimo")
     sub.add_argument("--umbral-vad", type=float, default=transcribe.UMBRAL_VAD,
                      help="0.5 por defecto; subilo si el ruido de planta entra como voz")
+    sub.add_argument("--hueco-maximo", type=float, default=transcribe.HUECO_MAXIMO_S,
+                     help="segundos de silencio entre palabras que cortan la línea "
+                          "(1.5 por defecto; bajalo para líneas más cortas)")
     sub.add_argument("--sin-json", action="store_true",
                      help="no generar el .segments.json")
 
@@ -38,7 +41,8 @@ def _opciones_transcripcion(sub: argparse.ArgumentParser) -> None:
 def _extra_transcripcion(args: argparse.Namespace) -> list[str]:
     """Reconstruye los flags para pasárselos a un subproceso."""
     extra = ["--modelo", args.modelo, "--compute-type", args.compute_type,
-             "--device", args.device, "--umbral-vad", str(args.umbral_vad)]
+             "--device", args.device, "--umbral-vad", str(args.umbral_vad),
+             "--hueco-maximo", str(args.hueco_maximo)]
     if args.sin_json:
         extra.append("--sin-json")
     return extra
@@ -103,7 +107,8 @@ def cmd_transcribir(args: argparse.Namespace) -> int:
         transcribe.transcribir(wav, modelo=args.modelo,
                                compute_type=args.compute_type, device=args.device,
                                con_json=not args.sin_json,
-                               umbral_vad=args.umbral_vad)
+                               umbral_vad=args.umbral_vad,
+                               hueco_max=args.hueco_maximo)
     except lock.Ocupado as error:
         # Código propio: para el watcher esto no es un fallo del audio, sino un
         # "volvé más tarde".

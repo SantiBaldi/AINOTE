@@ -164,6 +164,30 @@ SEGMENTOS = [
 DURACION = 3720.0
 
 
+def _palabras_de(inicio: float, fin: float, texto: str) -> list:
+    """Reparte el texto del segmento en palabras, como hace Whisper de verdad.
+
+    Dos detalles imitan al modelo real y sostienen las pruebas:
+
+    - La primera palabra arranca 0,25 s **antes** que el segmento. Así se
+      verifica que la línea toma el timestamp de la palabra y no el del
+      segmento, que es el que derrapa.
+    - Las palabras quedan contiguas, con huecos muy por debajo del umbral de
+      corte. Un Whisper real no deja segundos de silencio entre dos palabras
+      del mismo segmento; el doble tampoco debe hacerlo.
+    """
+    tokens = texto.split()
+    if not tokens:
+        return []
+    arranque = inicio - 0.25
+    paso = (fin - arranque) / len(tokens)
+    palabras = [_Palabra(arranque + i * paso, arranque + i * paso + paso * 0.9,
+                         " " + token)
+                for i, token in enumerate(tokens)]
+    palabras[-1].end = fin
+    return palabras
+
+
 class WhisperModelFalso:
     """Registra con qué se lo llamó, para poder verificar los parámetros."""
 
@@ -182,13 +206,8 @@ class WhisperModelFalso:
 
     def transcribe(self, ruta, **kw):
         self.args_transcribe = kw
-        segmentos = []
-        for inicio, fin, texto in SEGMENTOS:
-            # La primera palabra arranca antes que el segmento: así se comprueba
-            # que la línea usa el timestamp de palabra y no el de segmento.
-            palabras = ([_Palabra(inicio - 0.25, inicio + 0.5, "x"),
-                         _Palabra(fin - 0.5, fin, "y")] if texto.strip() else [])
-            segmentos.append(_Segmento(inicio, fin, texto, palabras))
+        segmentos = [_Segmento(inicio, fin, texto, _palabras_de(inicio, fin, texto))
+                     for inicio, fin, texto in SEGMENTOS]
         return iter(segmentos), _Info(DURACION)
 
 
