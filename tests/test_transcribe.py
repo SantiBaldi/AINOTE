@@ -311,3 +311,38 @@ class TestHuecosEnElArchivo(CasoConCarpetas):
         lineas = [l for l in destino.read_text(encoding="utf-8").splitlines()
                   if l.startswith("[")]
         self.assertEqual(lineas, ["[00:00:01] Uno.", "[00:00:31] Dos."])
+
+
+class TestSinVad(CasoConCarpetas):
+    """El VAD concatena el audio y `faster-whisper` remapea los tiempos; ese
+    remapeo puede fallar. Sin VAD los timestamps salen directos."""
+
+    def setUp(self):
+        super().setUp()
+        instalar_whisper(self)
+        self.wav = self.escribir_wav("2026-08-22_perdidas")
+
+    def test_por_defecto_usa_vad(self):
+        with silencio():
+            destino = transcribe.transcribir(self.wav, device="cpu")
+        self.assertTrue(WhisperModelFalso.ultima_instancia.args_transcribe["vad_filter"])
+        self.assertIn("vad: si", destino.read_text(encoding="utf-8"))
+
+    def test_sin_vad_lo_desactiva_y_no_manda_parametros(self):
+        with silencio():
+            destino = transcribe.transcribir(self.wav, device="cpu", usar_vad=False)
+        kw = WhisperModelFalso.ultima_instancia.args_transcribe
+        self.assertFalse(kw["vad_filter"])
+        self.assertIsNone(kw["vad_parameters"])
+        self.assertIn("vad: no", destino.read_text(encoding="utf-8"))
+
+    def test_el_front_matter_deja_asentado_el_modo(self):
+        # Dos transcripciones del mismo audio con distinto modo no son
+        # comparables si no se sabe cuál es cuál.
+        with silencio():
+            transcribe.transcribir(self.wav, device="cpu", usar_vad=False)
+        campos = dict(
+            linea.split(": ", 1) for linea in
+            paths.ruta_transcript("2026-08-22_perdidas").read_text(encoding="utf-8")
+            .split("---")[1].strip().splitlines())
+        self.assertEqual(campos["vad"], "no")

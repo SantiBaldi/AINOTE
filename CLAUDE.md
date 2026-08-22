@@ -197,6 +197,17 @@ No re-litigar en sesiones futuras:
   entre medio salieron como **una sola línea de 10,06 a 50,74**. Como
   `word_timestamps` ya está activo, partir por los huecos reales cuesta nada y
   es lo que hace utilizable el salto al audio de la Fase 2.
+- **El remapeo del VAD puede errar, y `partir_por_huecos` no lo puede arreglar.**
+  Medido en la notebook con cinco números dichos cada 10 s: "10", "40" y "50"
+  quedaron con 0,06 s de error, pero el "30" salió con timestamp ~21 en vez de
+  ~30 — **9 segundos de error**. `faster-whisper` transcribe el audio
+  concatenado por el VAD y después remapea; ese remapeo falló para una palabra.
+  Partir por huecos no ayuda: no hay hueco que ver donde Whisper no lo reporta.
+  Por eso existe `--sin-vad`, que es más lento pero toma los timestamps
+  directos del audio, sin remapeo. **Cuál conviene por defecto es una decisión
+  abierta**, a resolver comparando ambos modos sobre una reunión real. El
+  front-matter guarda `vad: si|no` para que dos transcripciones del mismo audio
+  se puedan comparar.
 - **`condition_on_previous_text=False`.** Whisper entra en bucles de repetición
   con audio ruidoso; deshabilitar el arrastre de contexto lo corta.
 

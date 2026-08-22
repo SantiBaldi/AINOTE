@@ -109,8 +109,8 @@ def partir_por_huecos(segmento, hueco_max: float = HUECO_MAXIMO_S
     return trozos
 
 
-def _front_matter(nombre: str, wav: Path, duracion: float,
-                  modelo: str, compute_type: str) -> str:
+def _front_matter(nombre: str, wav: Path, duracion: float, modelo: str,
+                  compute_type: str, usar_vad: bool = True) -> str:
     return (
         "---\n"
         f"reunion: {nombre}\n"
@@ -119,6 +119,7 @@ def _front_matter(nombre: str, wav: Path, duracion: float,
         f"modelo: {modelo}\n"
         f"compute_type: {compute_type}\n"
         f"idioma: {IDIOMA}\n"
+        f"vad: {'si' if usar_vad else 'no'}\n"
         f"generado: {datetime.now().isoformat(timespec='seconds')}\n"
         "---\n\n"
     )
@@ -127,7 +128,8 @@ def _front_matter(nombre: str, wav: Path, duracion: float,
 def transcribir(wav: Path, modelo: str = MODELO, compute_type: str = COMPUTE_TYPE,
                 device: str = DEVICE, con_json: bool = True,
                 umbral_vad: float = UMBRAL_VAD,
-                hueco_max: float = HUECO_MAXIMO_S) -> Path:
+                hueco_max: float = HUECO_MAXIMO_S,
+                usar_vad: bool = True) -> Path:
     """Transcribe `wav` y devuelve la ruta del `.md` generado."""
     if not wav.exists():
         raise FileNotFoundError(f"No encuentro el audio: {wav}")
@@ -147,11 +149,11 @@ def transcribir(wav: Path, modelo: str = MODELO, compute_type: str = COMPUTE_TYP
     with lock.transcripcion():
         return _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo,
                                         compute_type, device, con_json, umbral_vad,
-                                        hueco_max)
+                                        hueco_max, usar_vad)
 
 
 def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type,
-                             device, con_json, umbral_vad, hueco_max):
+                             device, con_json, umbral_vad, hueco_max, usar_vad):
     if device == "cuda":
         gpu.exigir_vram(compute_type, f"Whisper {modelo}")
     libre_inicial = gpu.reporte("antes de cargar Whisper")
@@ -178,13 +180,13 @@ def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type
             str(wav),
             language=IDIOMA,
             task="transcribe",
-            vad_filter=True,
+            vad_filter=usar_vad,
             vad_parameters={
                 "threshold": umbral_vad,
                 "max_speech_duration_s": MAX_BLOQUE_S,
                 "min_silence_duration_ms": SILENCIO_MIN_MS,
                 "speech_pad_ms": PADDING_MS,
-            },
+            } if usar_vad else None,
             word_timestamps=True,
             condition_on_previous_text=False,
             hotwords=hotwords or None,
@@ -195,13 +197,15 @@ def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type
         )
 
         duracion = float(getattr(info, "duration", 0.0) or 0.0)
-        print(f"  Audio: {paths.hms(duracion)}. Transcribiendo...")
+        modo = "con VAD" if usar_vad else "SIN VAD (más lento, timestamps directos)"
+        print(f"  Audio: {paths.hms(duracion)}. Transcribiendo {modo}...")
 
         # Se escribe a .md.tmp y recién al final se renombra: el watcher usa la
         # existencia del .md como marca de "ya procesado", y un .md a medio
         # escribir sería un falso positivo.
         with parcial.open("w", encoding="utf-8", newline="\n") as salida:
-            salida.write(_front_matter(nombre, wav, duracion, modelo, compute_type))
+            salida.write(_front_matter(nombre, wav, duracion, modelo, compute_type,
+                                       usar_vad))
             contador = 0
             for segmento in segmentos:
                 for inicio, fin, texto in partir_por_huecos(segmento, hueco_max):

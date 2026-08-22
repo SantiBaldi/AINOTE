@@ -34,6 +34,9 @@ def _opciones_transcripcion(sub: argparse.ArgumentParser) -> None:
     sub.add_argument("--hueco-maximo", type=float, default=transcribe.HUECO_MAXIMO_S,
                      help="segundos de silencio entre palabras que cortan la línea "
                           "(1.5 por defecto; bajalo para líneas más cortas)")
+    sub.add_argument("--sin-vad", action="store_true",
+                     help="no filtrar silencios con el VAD: más lento, pero los "
+                          "timestamps salen directos del audio, sin remapeo")
     sub.add_argument("--sin-json", action="store_true",
                      help="no generar el .segments.json")
 
@@ -45,6 +48,8 @@ def _extra_transcripcion(args: argparse.Namespace) -> list[str]:
              "--hueco-maximo", str(args.hueco_maximo)]
     if args.sin_json:
         extra.append("--sin-json")
+    if args.sin_vad:
+        extra.append("--sin-vad")
     return extra
 
 
@@ -108,7 +113,8 @@ def cmd_transcribir(args: argparse.Namespace) -> int:
                                compute_type=args.compute_type, device=args.device,
                                con_json=not args.sin_json,
                                umbral_vad=args.umbral_vad,
-                               hueco_max=args.hueco_maximo)
+                               hueco_max=args.hueco_maximo,
+                               usar_vad=not args.sin_vad)
     except lock.Ocupado as error:
         # Código propio: para el watcher esto no es un fallo del audio, sino un
         # "volvé más tarde".

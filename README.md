@@ -130,6 +130,7 @@ micrófono, y el error real de los timestamps.
 | No entra audio | `python -m src dispositivos` y elegí con `--dispositivo N` |
 | Se cuela ruido de máquina como voz | subí `--umbral-vad 0.6` o `0.7` |
 | Las líneas abarcan demasiado tiempo | bajá `--hueco-maximo 1.0` o `0.8` |
+| Un timestamp cae varios segundos corrido | probá `--sin-vad`: más lento, pero sin el remapeo que lo causa |
 | Whisper repite una frase en loop | ya está mitigado; si pasa igual, subí el umbral de VAD |
 | Palabras de planta mal transcriptas | agregalas arriba de todo en `glosario.txt` |
 | `Ya hay otra transcripción corriendo` | es a propósito: nunca corren dos a la vez. Esperá. Si ninguna está corriendo de verdad, borrá `.ainote.lock` |
