@@ -60,14 +60,16 @@ def _resolver_wav(referencia: str) -> Path:
     candidato = Path(referencia)
     if candidato.exists():
         return candidato
-    for prueba in (paths.AUDIO / referencia, paths.AUDIO / f"{referencia}.wav"):
-        if prueba.exists():
-            return prueba
+    if (paths.AUDIO / referencia).exists():
+        return paths.AUDIO / referencia
+    encontrado = paths.buscar_audio(referencia)
+    if encontrado:
+        return encontrado
 
     # Listar lo que sí hay: equivocarse de fecha es fácil, y adivinar el nombre
     # exacto para reintentar es una pérdida de tiempo evitable.
     mensaje = [f"No encuentro el audio '{referencia}'."]
-    disponibles = sorted(paths.AUDIO.glob("*.wav"), reverse=True)
+    disponibles = paths.audios()
     if disponibles:
         mensaje.append(f"  En {paths.relativa(paths.AUDIO)}/ tenés:")
         mensaje += [f"      {w.stem}" for w in disponibles[:10]]
@@ -111,6 +113,52 @@ def cmd_grabar(args: argparse.Namespace) -> int:
     orden = [sys.executable, "-m", "src", "transcribir", str(destino),
              *_extra_transcripcion(args)]
     return subprocess.run(orden, cwd=str(paths.RAIZ)).returncode
+
+
+def cmd_importar(args: argparse.Namespace) -> int:
+    """Trae una grabación de afuera a /audio/ con el nombre de la convención.
+
+    Copia, no mueve: el original queda donde estaba. No reencodea —`faster-whisper`
+    decodifica m4a, mp3 y compañía— así que no se pierde calidad ni tiempo.
+    """
+    import shutil
+
+    paths.asegurar_carpetas()
+    origen = Path(args.archivo)
+    if not origen.exists():
+        print(f"  No encuentro el archivo:\n    {origen}", file=sys.stderr)
+        return 2
+    if origen.suffix.lower() not in paths.EXTENSIONES_AUDIO:
+        print(f"  No sé leer '{origen.suffix}'. Formatos soportados: "
+              f"{', '.join(paths.EXTENSIONES_AUDIO)}", file=sys.stderr)
+        return 2
+
+    dia = args.fecha or paths.fecha_de(origen)
+    nombre = paths.nombre_libre(args.titulo or origen.stem, dia)
+    destino = paths.ruta_audio(nombre, origen.suffix.lower())
+
+    print(f"  Copiando a {paths.relativa(destino)} ...")
+    shutil.copy2(origen, destino)
+    print(f"  Listo. El original quedó donde estaba.")
+
+    if args.sin_transcribir:
+        print(f"  Para transcribir: python -m src transcribir {nombre}")
+        return 0
+
+    print()
+    orden = [sys.executable, "-m", "src", "transcribir", str(destino),
+             *_extra_transcripcion(args)]
+    return subprocess.run(orden, cwd=str(paths.RAIZ)).returncode
+
+
+def _fecha(texto: str):
+    from datetime import datetime
+
+    try:
+        return datetime.strptime(texto, "%Y-%m-%d").date()
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"'{texto}' no es una fecha AAAA-MM-DD (ej: 2026-07-21)")
 
 
 def cmd_transcribir(args: argparse.Namespace) -> int:
@@ -206,6 +254,19 @@ def construir_parser() -> argparse.ArgumentParser:
                          help="segundos entre sondeos")
     _opciones_transcripcion(vigilar)
     vigilar.set_defaults(func=cmd_vigilar)
+
+    importar = subs.add_parser(
+        "importar", help="traer una grabación de afuera y transcribirla")
+    importar.add_argument("archivo", help="ruta al audio (wav, m4a, mp3, ...)")
+    importar.add_argument("--titulo", help="nombre de la reunión; si no, sale "
+                                           "del nombre del archivo")
+    importar.add_argument("--fecha", type=_fecha,
+                          help="AAAA-MM-DD; si no, se busca en el nombre del "
+                               "archivo y si no está se usa la del archivo")
+    importar.add_argument("--sin-transcribir", action="store_true",
+                          help="sólo copiar, sin transcribir")
+    _opciones_transcripcion(importar)
+    importar.set_defaults(func=cmd_importar)
 
     dispositivos = subs.add_parser("dispositivos", help="listar micrófonos")
     dispositivos.set_defaults(func=cmd_dispositivos)

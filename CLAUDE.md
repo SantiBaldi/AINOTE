@@ -103,6 +103,7 @@ propietarias.
 
 ```
 /audio/2026-08-22_perdidas.wav          PCM 16-bit (16 kHz mono si el mic lo acepta)
+/audio/2026-07-21_perdidas.m4a          grabación importada de afuera, sin reencodear
 /transcripts/2026-08-22_perdidas.md     líneas [HH:MM:SS] + front-matter
 /transcripts/2026-08-22_perdidas.segments.json   índice inicio/fin por segmento
 /notes/2026-08-22_perdidas.md           texto libre + marcadores (Fase 2)
@@ -118,10 +119,18 @@ Reglas:
 - **Nada de bases de datos propietarias ni formatos binarios propios.**
 - `index.sqlite` es **sólo índice de búsqueda**: debe poder reconstruirse por
   completo desde los archivos de texto. Si se borra, no se pierde información.
+- **El grabador produce WAV, pero se acepta lo que PyAV decodifique** (m4a,
+  mp3, ogg, flac...). Las grabaciones viejas vienen en otros formatos y
+  reencodearlas sólo perdería calidad y tiempo: `faster-whisper` las lee igual.
+  `python -m src importar <ruta>` las copia a `/audio/` con el nombre de la
+  convención, sacando la fecha del nombre del archivo si lo trae estampado
+  (`20260721`) y dejando el original donde estaba.
 - Convención de nombres: **`AAAA-MM-DD_<slug>`**, con el slug en minúsculas,
   sin tildes, y `[a-z0-9-]` únicamente. Colisiones del mismo día resuelven con
-  sufijo `-2`, `-3`. Un solo módulo decide esto: `src/paths.py`. Nadie más
-  construye nombres a mano.
+  sufijo `-2`, `-3`. El slug se corta a 50 caracteres —los nombres que ponen
+  las grabadoras pasan los 100— partiendo en un guión, nunca al medio de una
+  palabra. Un solo módulo decide esto: `src/paths.py`. Nadie más construye
+  nombres a mano.
 
 ### Formato del transcript
 

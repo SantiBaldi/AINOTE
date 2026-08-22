@@ -28,6 +28,15 @@ CARPETAS = (AUDIO, TRANSCRIPTS, NOTES, MINUTAS)
 # 2026-08-22_perdidas  /  2026-08-22_bajada-de-gerencia-2
 PATRON_SESION = re.compile(r"^(\d{4}-\d{2}-\d{2})_([a-z0-9]+(?:-[a-z0-9]+)*)$")
 
+# El grabador produce WAV, pero se aceptan los formatos que PyAV decodifica:
+# las grabaciones viejas suelen venir en m4a o mp3 y reencodearlas sólo
+# perdería calidad y tiempo.
+EXTENSIONES_AUDIO = (".wav", ".m4a", ".mp3", ".ogg", ".flac", ".opus", ".webm",
+                     ".mp4", ".aac", ".wma")
+
+# Ocho dígitos de fecha dentro de un nombre de archivo: 20260721
+PATRON_FECHA_SUELTA = re.compile(r"(20\d{2})(\d{2})(\d{2})")
+
 
 def asegurar_carpetas() -> None:
     """Crea las carpetas de datos si no existen. Idempotente."""
@@ -35,7 +44,10 @@ def asegurar_carpetas() -> None:
         carpeta.mkdir(parents=True, exist_ok=True)
 
 
-def slug(texto: str) -> str:
+LARGO_MAXIMO_SLUG = 50
+
+
+def slug(texto: str, largo_max: int = LARGO_MAXIMO_SLUG) -> str:
     """Normaliza un texto libre a `[a-z0-9-]`.
 
     Saca tildes por descomposición NFKD, pasa a minúsculas, y colapsa todo lo
@@ -49,6 +61,15 @@ def slug(texto: str) -> str:
     plano = plano.lower()
     plano = re.sub(r"[^a-z0-9]+", "-", plano)
     plano = plano.strip("-")
+
+    # Los nombres que ponen las grabadoras pueden pasar los 100 caracteres.
+    # Se corta en un guión para no partir una palabra al medio.
+    if len(plano) > largo_max:
+        plano = plano[:largo_max]
+        if "-" in plano:
+            plano = plano[:plano.rindex("-")]
+        plano = plano.strip("-")
+
     return plano or "reunion"
 
 
@@ -85,8 +106,46 @@ def _ocupado(nombre: str) -> bool:
     return any(any(carpeta.glob(f"{nombre}.*")) for carpeta in CARPETAS)
 
 
-def ruta_audio(nombre: str) -> Path:
-    return AUDIO / f"{nombre}.wav"
+def ruta_audio(nombre: str, extension: str = ".wav") -> Path:
+    return AUDIO / f"{nombre}{extension}"
+
+
+def buscar_audio(nombre: str) -> Path | None:
+    """Encuentra el audio de una sesión, sea cual sea su formato."""
+    for extension in EXTENSIONES_AUDIO:
+        candidato = AUDIO / f"{nombre}{extension}"
+        if candidato.exists():
+            return candidato
+    return None
+
+
+def audios() -> list[Path]:
+    """Todos los audios de /audio/, del más reciente al más viejo por nombre."""
+    if not AUDIO.exists():
+        return []
+    return sorted((p for p in AUDIO.iterdir()
+                   if p.is_file() and p.suffix.lower() in EXTENSIONES_AUDIO),
+                  reverse=True)
+
+
+def fecha_de(ruta: Path) -> date:
+    """Fecha de una grabación: la del nombre si la trae, si no la del archivo.
+
+    Las grabadoras suelen estampar `20260721` en el nombre, y para un audio
+    viejo eso es más confiable que la fecha de modificación, que cambia al
+    copiarlo de una carpeta a otra.
+    """
+    encontrada = PATRON_FECHA_SUELTA.search(ruta.stem)
+    if encontrada:
+        anio, mes, dia = (int(g) for g in encontrada.groups())
+        try:
+            return date(anio, mes, dia)
+        except ValueError:
+            pass
+    try:
+        return date.fromtimestamp(ruta.stat().st_mtime)
+    except OSError:
+        return date.today()
 
 
 def ruta_transcript(nombre: str) -> Path:

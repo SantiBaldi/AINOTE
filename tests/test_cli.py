@@ -168,3 +168,94 @@ class TestGrabar(CasoConCarpetas):
         nombre = capturado["destino"].stem
         self.assertTrue(paths.es_nombre_sesion(nombre), nombre)
         self.assertTrue(nombre.endswith("_reunion-de-perdidas-l4"), nombre)
+
+
+class TestImportar(CasoConCarpetas):
+    """Traer grabaciones viejas, con nombres que no siguen la convención."""
+
+    def _externo(self, nombre="rp 20260721 reunión de perdidas semana 29.m4a"):
+        ruta = self.tmp / "escritorio" / nombre
+        ruta.parent.mkdir(exist_ok=True)
+        ruta.write_bytes(b"audio falso")
+        return ruta
+
+    def test_copia_con_el_nombre_de_la_convencion(self):
+        origen = self._externo()
+        with silencio():
+            self.assertEqual(
+                cli.main(["importar", str(origen), "--titulo", "perdidas semana 29",
+                          "--sin-transcribir"]), 0)
+        destino = paths.ruta_audio("2026-07-21_perdidas-semana-29", ".m4a")
+        self.assertTrue(destino.exists())
+        self.assertTrue(paths.es_nombre_sesion(destino.stem))
+
+    def test_no_toca_el_original(self):
+        origen = self._externo()
+        with silencio():
+            cli.main(["importar", str(origen), "--sin-transcribir"])
+        self.assertTrue(origen.exists(), "importar copia, no mueve")
+
+    def test_saca_la_fecha_del_nombre_del_archivo(self):
+        # Las grabadoras estampan 20260721; es más confiable que la fecha de
+        # modificación, que cambia al copiar el archivo de carpeta.
+        origen = self._externo()
+        with silencio():
+            cli.main(["importar", str(origen), "--titulo", "x", "--sin-transcribir"])
+        self.assertTrue(paths.ruta_audio("2026-07-21_x", ".m4a").exists())
+
+    def test_la_fecha_explicita_manda(self):
+        origen = self._externo()
+        with silencio():
+            cli.main(["importar", str(origen), "--titulo", "x",
+                      "--fecha", "2026-01-05", "--sin-transcribir"])
+        self.assertTrue(paths.ruta_audio("2026-01-05_x", ".m4a").exists())
+
+    def test_sin_titulo_lo_deriva_del_archivo_y_lo_acorta(self):
+        largo = ("rp 20260721 reunión de perdidas semana 29, charla con MP sobre "
+                 "formularios de capacidad de indec 20260721-163027.m4a")
+        with silencio():
+            cli.main(["importar", str(self._externo(largo)), "--sin-transcribir"])
+        importados = list(paths.AUDIO.glob("*.m4a"))
+        self.assertEqual(len(importados), 1)
+        nombre = importados[0].stem
+        self.assertTrue(paths.es_nombre_sesion(nombre), nombre)
+        self.assertLessEqual(len(nombre), 11 + paths.LARGO_MAXIMO_SLUG)
+
+    def test_rechaza_un_formato_que_no_sabe_leer(self):
+        with silencio() as salida:
+            self.assertEqual(
+                cli.main(["importar", str(self._externo("apunte.txt")),
+                          "--sin-transcribir"]), 2)
+        self.assertIn(".m4a", salida.getvalue())
+
+    def test_archivo_inexistente(self):
+        with silencio() as salida:
+            self.assertEqual(cli.main(["importar", "D:\\no\\existe.m4a"]), 2)
+        self.assertIn("No encuentro", salida.getvalue())
+
+    def test_dos_importaciones_del_mismo_dia_no_se_pisan(self):
+        for _ in range(2):
+            with silencio():
+                cli.main(["importar", str(self._externo()), "--titulo", "perdidas",
+                          "--sin-transcribir"])
+        self.assertTrue(paths.ruta_audio("2026-07-21_perdidas", ".m4a").exists())
+        self.assertTrue(paths.ruta_audio("2026-07-21_perdidas-2", ".m4a").exists())
+
+
+class TestAudioNoWav(CasoConCarpetas):
+    def test_transcribir_encuentra_un_m4a_por_su_nombre_de_sesion(self):
+        paths.ruta_audio("2026-07-21_perdidas", ".m4a").write_bytes(b"x")
+        self.assertEqual(cli._resolver_wav("2026-07-21_perdidas").suffix, ".m4a")
+
+    def test_el_watcher_ve_los_formatos_no_wav(self):
+        from src import watch
+
+        paths.ruta_audio("2026-07-21_perdidas", ".m4a").write_bytes(b"x")
+        self.assertEqual([p.name for p in watch._pendientes()],
+                         ["2026-07-21_perdidas.m4a"])
+
+    def test_el_watcher_ignora_lo_que_no_es_audio(self):
+        from src import watch
+
+        (paths.AUDIO / "notas.txt").write_text("x", encoding="utf-8")
+        self.assertEqual(watch._pendientes(), [])

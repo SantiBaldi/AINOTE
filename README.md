@@ -73,7 +73,8 @@ Otros comandos:
 
 ```bat
 python -m src grabar perdidas --dispositivo 2   :: sin preguntar, con mic elegido
-python -m src transcribir 2026-08-22_perdidas   :: transcribir un WAV puntual
+python -m src transcribir 2026-08-22_perdidas   :: transcribir un audio puntual
+python -m src importar "C:\ruta\grabacion.m4a"  :: traer una grabación de afuera
 python -m src vigilar                           :: transcribe solo todo WAV nuevo
 python -m src dispositivos                      :: listar micrófonos
 python -m src gpu                               :: VRAM libre y qué modelo entra

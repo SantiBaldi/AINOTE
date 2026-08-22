@@ -22,14 +22,9 @@ from . import paths
 INTERVALO = 2.0  # segundos entre sondeos
 
 
-def _wavs() -> list[Path]:
-    if not paths.AUDIO.exists():
-        return []
-    return sorted(p for p in paths.AUDIO.glob("*.wav") if p.is_file())
-
-
 def _pendientes() -> list[Path]:
-    return [w for w in _wavs() if not paths.ruta_transcript(w.stem).exists()]
+    return [a for a in paths.audios()
+            if not paths.ruta_transcript(a.stem).exists()]
 
 
 OCUPADO = 4  # el CLI devuelve esto cuando ya hay otra transcripción corriendo
