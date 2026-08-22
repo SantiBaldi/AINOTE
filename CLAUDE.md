@@ -232,10 +232,36 @@ Lo que dicen estos números:
 - Sin VAD **no alucinó nada** en 43 s de silencio, que era el riesgo principal
   de sacarlo. Pero era silencio limpio de oficina, no ruido de planta.
 
-**Sigue siendo una decisión abierta**, y lo que falta medir sólo sale de una
-reunión real: cuántas frases inventa sin VAD con ruido de máquinas de fondo, y
-cuánto más tarda en una hora de audio. La evidencia hasta acá favorece
-`--sin-vad`; el default no se cambió porque falta ese dato.
+### DECISIÓN CERRADA: el VAD va apagado por defecto
+
+Se midió sobre audio real de reunión (1:22, varias personas, videollamada) y el
+resultado cierra la discusión. **Con el VAD activo se perdieron cuatro
+intervenciones completas** que sin VAD aparecen:
+
+```
+"bienvenido, ahora queremos escuchar a nuestra gerente de marketing..."
+"Luz, ¿estás con el micrófono apagado?"
+"Nayeli, después de Luz, entras tú nuevamente."
+"Hola Luz, te escuchamos."
+```
+
+Además, el VAD partió frases en timestamps disparatados —`[00:00:26] Buenas` y
+`[00:00:37] noches con todos...` son la misma frase— y transcribió peor los
+nombres propios: "Nayemi Vanda" con VAD, "Nayeli Banda" (el nombre real) sin.
+Sin VAD no inventó nada.
+
+El VAD estaba puesto para evitar alucinaciones en los silencios. El riesgo real
+resultó ser el opuesto y mucho peor: **una frase inventada se detecta leyendo;
+una intervención perdida no se sabe que falta.** Para una minuta de la que salen
+tareas asignadas, perder habla es inaceptable.
+
+`--con-vad` sigue disponible para audio donde la velocidad importe más que la
+completitud. No usarlo para una reunión que importe.
+
+Lo único que quedó sin medir es cuánto más tarda sin VAD en una hora de audio.
+Si resultara prohibitivo, la salida no es volver al VAD tal cual, sino usarlo
+sólo para ubicar los bloques de voz y transcribir cada uno por separado con
+`clip_timestamps`, sin concatenar —que es lo que rompe el remapeo—.
 - **`condition_on_previous_text=False`.** Whisper entra en bucles de repetición
   con audio ruidoso; deshabilitar el arrastre de contexto lo corta.
 

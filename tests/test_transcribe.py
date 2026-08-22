@@ -68,9 +68,7 @@ class TestTranscribir(CasoConCarpetas):
         self.assertEqual(kw["language"], "es")
         self.assertTrue(kw["word_timestamps"])
         self.assertFalse(kw["condition_on_previous_text"])
-        self.assertTrue(kw["vad_filter"])
-        self.assertEqual(kw["vad_parameters"]["max_speech_duration_s"], 25.0)
-        self.assertGreater(kw["vad_parameters"]["speech_pad_ms"], 0)
+        self.assertFalse(kw["vad_filter"], "el default cambió: el VAD se come frases")
 
     def test_inyecta_el_glosario_como_hotwords(self):
         paths.GLOSARIO.write_text("# comentario\nscrap\nACR\n\nboquilla  # inline\n",
@@ -322,19 +320,22 @@ class TestSinVad(CasoConCarpetas):
         instalar_whisper(self)
         self.wav = self.escribir_wav("2026-08-22_perdidas")
 
-    def test_por_defecto_usa_vad(self):
+    def test_por_defecto_no_usa_vad(self):
+        # El VAD se comia frases enteras de la reunión. Medido, ver CLAUDE.md §5.
         with silencio():
             destino = transcribe.transcribir(self.wav, device="cpu")
-        self.assertTrue(WhisperModelFalso.ultima_instancia.args_transcribe["vad_filter"])
-        self.assertIn("vad: si", destino.read_text(encoding="utf-8"))
-
-    def test_sin_vad_lo_desactiva_y_no_manda_parametros(self):
-        with silencio():
-            destino = transcribe.transcribir(self.wav, device="cpu", usar_vad=False)
         kw = WhisperModelFalso.ultima_instancia.args_transcribe
         self.assertFalse(kw["vad_filter"])
         self.assertIsNone(kw["vad_parameters"])
         self.assertIn("vad: no", destino.read_text(encoding="utf-8"))
+
+    def test_se_puede_pedir_el_vad_explicitamente(self):
+        with silencio():
+            destino = transcribe.transcribir(self.wav, device="cpu", usar_vad=True)
+        kw = WhisperModelFalso.ultima_instancia.args_transcribe
+        self.assertTrue(kw["vad_filter"])
+        self.assertEqual(kw["vad_parameters"]["max_speech_duration_s"], 25.0)
+        self.assertIn("vad: si", destino.read_text(encoding="utf-8"))
 
     def test_el_front_matter_deja_asentado_el_modo(self):
         # Dos transcripciones del mismo audio con distinto modo no son

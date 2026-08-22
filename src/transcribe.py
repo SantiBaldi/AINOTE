@@ -36,6 +36,7 @@ COMPUTE_TYPE = "float16"
 DEVICE = "cuda"
 IDIOMA = "es"
 
+USAR_VAD = False        # ver CLAUDE.md §5: el VAD se come habla. Medido.
 MAX_BLOQUE_S = 25.0     # techo por bloque de voz
 PADDING_MS = 400        # margen alrededor de cada bloque, para no comer arranques
 SILENCIO_MIN_MS = 500   # silencio mínimo para considerar un corte
@@ -129,7 +130,7 @@ def transcribir(wav: Path, modelo: str = MODELO, compute_type: str = COMPUTE_TYP
                 device: str = DEVICE, con_json: bool = True,
                 umbral_vad: float = UMBRAL_VAD,
                 hueco_max: float = HUECO_MAXIMO_S,
-                usar_vad: bool = True) -> Path:
+                usar_vad: bool = USAR_VAD) -> Path:
     """Transcribe `wav` y devuelve la ruta del `.md` generado."""
     if not wav.exists():
         raise FileNotFoundError(f"No encuentro el audio: {wav}")
@@ -197,7 +198,7 @@ def _transcribir_con_cerrojo(wav, nombre, destino, parcial, modelo, compute_type
         )
 
         duracion = float(getattr(info, "duration", 0.0) or 0.0)
-        modo = "con VAD" if usar_vad else "SIN VAD (más lento, timestamps directos)"
+        modo = "CON VAD (puede comerse frases)" if usar_vad else "sin VAD"
         print(f"  Audio: {paths.hms(duracion)}. Transcribiendo {modo}...")
 
         # Se escribe a .md.tmp y recién al final se renombra: el watcher usa la
