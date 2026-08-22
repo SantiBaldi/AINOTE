@@ -61,8 +61,20 @@ def _resolver_wav(referencia: str) -> Path:
     for prueba in (paths.AUDIO / referencia, paths.AUDIO / f"{referencia}.wav"):
         if prueba.exists():
             return prueba
-    raise SystemExit(f"No encuentro el audio '{referencia}'. "
-                     f"Buscá en {paths.relativa(paths.AUDIO)}/ o pasá la ruta completa.")
+
+    # Listar lo que sí hay: equivocarse de fecha es fácil, y adivinar el nombre
+    # exacto para reintentar es una pérdida de tiempo evitable.
+    mensaje = [f"No encuentro el audio '{referencia}'."]
+    disponibles = sorted(paths.AUDIO.glob("*.wav"), reverse=True)
+    if disponibles:
+        mensaje.append(f"  En {paths.relativa(paths.AUDIO)}/ tenés:")
+        mensaje += [f"      {w.stem}" for w in disponibles[:10]]
+        if len(disponibles) > 10:
+            mensaje.append(f"      ... y {len(disponibles) - 10} más")
+    else:
+        mensaje.append(f"  La carpeta {paths.relativa(paths.AUDIO)}/ está vacía. "
+                       f"Grabá algo con: python -m src grabar")
+    raise SystemExit("\n".join(mensaje))
 
 
 def cmd_grabar(args: argparse.Namespace) -> int:

@@ -18,10 +18,22 @@ class TestResolverWav(CasoConCarpetas):
                            str(self.wav)):
             self.assertEqual(cli._resolver_wav(referencia), self.wav, referencia)
 
-    def test_audio_inexistente_da_un_mensaje_util(self):
+    def test_audio_inexistente_lista_los_que_hay(self):
+        # Equivocarse de fecha es facilísimo; el error tiene que mostrar los
+        # nombres reales en vez de mandar a adivinar.
+        self.escribir_wav("2026-08-20_acr-l3")
         with self.assertRaises(SystemExit) as caso:
-            cli._resolver_wav("no-existe")
-        self.assertIn("no-existe", str(caso.exception))
+            cli._resolver_wav("2026-08-25_perdidas")
+        mensaje = str(caso.exception)
+        self.assertIn("2026-08-25_perdidas", mensaje)
+        self.assertIn("2026-08-22_perdidas", mensaje)
+        self.assertIn("2026-08-20_acr-l3", mensaje)
+
+    def test_sin_audios_lo_dice(self):
+        self.wav.unlink()
+        with self.assertRaises(SystemExit) as caso:
+            cli._resolver_wav("cualquiera")
+        self.assertIn("vacía", str(caso.exception))
 
 
 class TestFlags(unittest.TestCase):
