@@ -1,0 +1,50 @@
+# Jerga de planta que Whisper tiende a errar. Una entrada por línea, # comenta.
+# Se inyecta como `hotwords` en todos los bloques de la transcripción.
+#
+# IMPORTANTE: el prompt de Whisper tiene un tope de 224 tokens. Poné arriba los
+# términos que más te importan: si la lista se pasa de largo, se recorta desde
+# abajo y te avisa por consola.
+#
+# Esto es una semilla: corregila con lo que se dice de verdad en tus reuniones.
+
+# --- Líneas y equipos ---
+L3
+L4
+soldadora
+selladora
+boquilla
+cabezal
+prensa
+horno
+barnizadora
+cizalla
+
+# --- Indicadores y procesos ---
+scrap
+OEE
+paro de línea
+cambio de formato
+seteo
+rendimiento
+merma
+retrabajo
+lote
+turno
+
+# --- Metodología ---
+ACR
+análisis causa raíz
+acción correctiva
+no conformidad
+hallazgo
+auditoría
+5 porqués
+Ishikawa
+
+# --- Materiales ---
+hojalata
+aerosol
+envase
+tapa
+fondo
+cuerpo

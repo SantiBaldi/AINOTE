@@ -1,0 +1,16 @@
+# Fase 1 - grabador + transcriptor. Instalar dentro de un venv de usuario:
+#   python -m venv .venv
+#   .venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# Ninguna requiere permisos de administrador: son wheels precompilados.
+
+# 1.1.0 es la primera version que reconoce "large-v3-turbo" por nombre y
+# empaqueta el VAD de Silero (ONNX, CPU) sin descargas extra.
+faster-whisper>=1.1.0
+
+# Wheel con PortAudio embebido. No compila nada, no toca el registro.
+sounddevice>=0.4.6
+
+# Entra igual como dependencia de ctranslate2; lo fijamos explicito.
+numpy>=1.24

@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# MATERIAL DE PLANTA: CONFIDENCIAL. NADA DE ESTO VA AL REMOTO.
+# Este repo esta en GitHub. Al repo va el codigo; los datos se quedan en la
+# notebook. Si alguna vez necesitas versionar contenido, hacelo en un repo
+# local aparte (git init en otra carpeta), nunca en este.
+# ---------------------------------------------------------------------------
+audio/*
+transcripts/*
+notes/*
+minutas/*
+tasks.json
+index.sqlite
+index.sqlite-*
+
+!audio/.gitkeep
+!transcripts/.gitkeep
+!notes/.gitkeep
+!minutas/.gitkeep
+
+# Entorno y cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.modelos/
+*.wav
+*.md.tmp
