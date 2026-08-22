@@ -81,3 +81,26 @@ class TestFormatoDeTiempo(unittest.TestCase):
     def test_ms(self):
         self.assertEqual(paths.ms(75), "01:15")
         self.assertEqual(paths.ms(3600), "60:00")
+
+
+class TestRutaRelativa(CasoConCarpetas):
+    def test_deja_la_ruta_relativa_a_la_raiz(self):
+        self.assertEqual(paths.relativa(paths.ruta_audio("2026-08-22_perdidas")),
+                         "audio/2026-08-22_perdidas.wav")
+
+    def test_usa_barras_normales_aunque_windows_use_contrabarras(self):
+        self.assertNotIn("\\", paths.relativa(paths.ruta_transcript("2026-08-22_x")))
+
+    def test_tolera_que_la_raiz_no_este_resuelta(self):
+        # En Windows la misma carpeta se puede escribir con el nombre corto 8.3
+        # o con el largo. Si sólo se resuelve un lado, relative_to falla y el
+        # front-matter se llena con la ruta absoluta de la máquina.
+        import unittest.mock
+        with unittest.mock.patch.object(paths, "RAIZ", self.tmp / "." / ""):
+            self.assertEqual(paths.relativa(paths.ruta_audio("2026-08-22_perdidas")),
+                             "audio/2026-08-22_perdidas.wav")
+
+    def test_una_ruta_de_afuera_queda_absoluta(self):
+        from pathlib import Path
+        ajena = Path("/otro/disco/audio.wav")
+        self.assertEqual(paths.relativa(ajena), ajena.as_posix())

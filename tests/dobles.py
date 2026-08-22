@@ -33,7 +33,8 @@ class CasoConCarpetas(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        self.tmp = Path(tempfile.mkdtemp(prefix="ainote-test-"))
+        # .resolve() imita a paths.RAIZ, que sale de Path(__file__).resolve().
+        self.tmp = Path(tempfile.mkdtemp(prefix="ainote-test-")).resolve()
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
         carpetas = {n: self.tmp / n

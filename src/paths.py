@@ -98,9 +98,17 @@ def ruta_segmentos(nombre: str) -> Path:
 
 
 def relativa(ruta: Path) -> str:
-    """Ruta relativa a la raíz del proyecto, con `/` — para el front-matter."""
+    r"""Ruta relativa a la raíz del proyecto, con `/` — para el front-matter.
+
+    Los dos lados se resuelven antes de compararlos. En Windows una misma
+    carpeta puede escribirse de dos formas —el nombre corto 8.3
+    (`C:\Users\SBALDI~1\...`) y el largo (`C:\Users\sbaldisones\...`)—, y
+    `resolve()` devuelve siempre el largo. Comparar una ruta resuelta contra una
+    que no lo está hacía fallar `relative_to`, y el front-matter terminaba con
+    la ruta absoluta de la máquina en lugar de `audio/<reunion>.wav`.
+    """
     try:
-        return ruta.resolve().relative_to(RAIZ).as_posix()
+        return ruta.resolve().relative_to(RAIZ.resolve()).as_posix()
     except ValueError:
         return ruta.as_posix()
 
