@@ -115,3 +115,64 @@ class TestDiagnostico(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"nvidia": falso}):
             texto = "\n".join(deps.diagnostico_cuda())
         self.assertIn("no tiene ninguna carpeta", texto)
+
+
+class TestRutaDeBusqueda(unittest.TestCase):
+    """ctranslate2 carga cuBLAS desde C++, y ese camino sólo mira el PATH."""
+
+    def _nvidia_falso(self):
+        import sys, tempfile, types
+        from pathlib import Path
+
+        raiz = Path(tempfile.mkdtemp(prefix="nvidia-falso-")).resolve()
+        carpetas = []
+        for libreria in ("cublas", "cudnn"):
+            carpeta = raiz / libreria / "bin"
+            carpeta.mkdir(parents=True)
+            (carpeta / f"{libreria}64_12.dll").write_bytes(b"")
+            carpetas.append(carpeta)
+
+        modulo = types.ModuleType("nvidia")
+        modulo.__path__ = [str(raiz)]
+        parche = mock.patch.dict(sys.modules, {"nvidia": modulo})
+        parche.start()
+        self.addCleanup(parche.stop)
+        return carpetas
+
+    def test_agrega_las_carpetas_al_path(self):
+        carpetas = self._nvidia_falso()
+        with mock.patch.dict(deps.os.environ, {"PATH": "/algo/previo"}):
+            deps.registrar_dlls_cuda()
+            path = deps.os.environ["PATH"].split(deps.os.pathsep)
+        for carpeta in carpetas:
+            self.assertIn(str(carpeta), path)
+        self.assertIn("/algo/previo", path, "no debe pisar el PATH existente")
+
+    def test_no_duplica_si_ya_estaban(self):
+        carpetas = self._nvidia_falso()
+        previo = deps.os.pathsep.join(str(c) for c in carpetas)
+        with mock.patch.dict(deps.os.environ, {"PATH": previo}):
+            deps.registrar_dlls_cuda()
+            path = deps.os.environ["PATH"].split(deps.os.pathsep)
+        for carpeta in carpetas:
+            self.assertEqual(path.count(str(carpeta)), 1)
+
+    def test_sin_librerias_no_toca_el_path(self):
+        with _sin_modulo("nvidia"):
+            with mock.patch.dict(deps.os.environ, {"PATH": "/intacto"}):
+                self.assertEqual(deps.registrar_dlls_cuda(), 0)
+                self.assertEqual(deps.os.environ["PATH"], "/intacto")
+
+    def test_si_ya_estan_instaladas_no_dice_que_las_instales(self):
+        # Repetir "pip install" cuando el paquete ya está es hacer perder tiempo.
+        self._nvidia_falso()
+        traducido = deps.traducir_error_de_dll(
+            RuntimeError("Library cublas64_12.dll is not found or cannot be loaded"))
+        self.assertNotIn("pip install", str(traducido))
+        self.assertIn("python -m src gpu", str(traducido))
+
+    def test_si_no_estan_instaladas_si_dice_como(self):
+        with _sin_modulo("nvidia"):
+            traducido = deps.traducir_error_de_dll(
+                RuntimeError("Library cublas64_12.dll is not found"))
+        self.assertIn("pip install nvidia-cublas-cu12", str(traducido))

@@ -55,22 +55,39 @@ def _carpetas_dll_cuda() -> list[Path]:
 
 
 def registrar_dlls_cuda() -> int:
-    """Agrega los DLLs de CUDA del venv a la ruta de búsqueda. Devuelve cuántos.
+    """Pone los DLLs de CUDA del venv al alcance de ctranslate2.
 
-    Sólo hace algo en Windows. En Linux el enlazador los encuentra por RPATH,
-    pero Windows no mira dentro de site-packages: sin esto, `ctranslate2` falla
-    con "Library cublas64_12.dll is not found" aunque el paquete esté instalado.
+    Hay que hacer las dos cosas, y por razones distintas:
+
+    - `os.add_dll_directory` sirve para los módulos de extensión de Python.
+    - El `PATH` del proceso es lo que hace falta para `ctranslate2`, que carga
+      cuBLAS y cuDNN desde su código C++ con un `LoadLibrary` sin flags. Ese
+      camino **no** consulta los directorios de `AddDllDirectory`, que sólo
+      participan cuando quien carga pasa `LOAD_LIBRARY_SEARCH_USER_DIRS`. Con
+      sólo `add_dll_directory`, ctranslate2 sigue fallando con
+      "Library cublas64_12.dll is not found" aunque el paquete esté instalado.
+
+    En Linux no hace falta nada: el enlazador las ubica por RPATH.
+
+    Devuelve la cantidad de carpetas puestas al alcance.
     """
-    if not hasattr(os, "add_dll_directory"):  # no es Windows
+    carpetas = _carpetas_dll_cuda()
+    if not carpetas:
         return 0
-    registradas = 0
-    for carpeta in _carpetas_dll_cuda():
-        try:
-            os.add_dll_directory(str(carpeta))
-            registradas += 1
-        except OSError:
-            continue
-    return registradas
+
+    if hasattr(os, "add_dll_directory"):
+        for carpeta in carpetas:
+            try:
+                os.add_dll_directory(str(carpeta))
+            except OSError:
+                continue
+
+    actual = os.environ.get("PATH", "")
+    ya_estan = set(actual.split(os.pathsep))
+    nuevas = [str(c) for c in carpetas if str(c) not in ya_estan]
+    if nuevas:
+        os.environ["PATH"] = os.pathsep.join(nuevas + [actual] if actual else nuevas)
+    return len(carpetas)
 
 
 # Nombre del DLL -> paquete de pip que lo trae.
@@ -96,6 +113,13 @@ def traducir_error_de_dll(error: Exception) -> DependenciaFaltante | None:
                    None)
     if paquete is None:
         return None
+
+    if _carpetas_dll_cuda():
+        # Están instaladas pero no se cargan: reinstalarlas no cambia nada.
+        return DependenciaFaltante(
+            f"Una librería de CUDA está instalada pero no se puede cargar: {texto}\n"
+            f"  Para ver qué pasa:  python -m src gpu\n"
+            f"  Ahí figura si cada DLL se encuentra o no, y en qué carpeta está.")
 
     return DependenciaFaltante(
         f"Falta una librería de CUDA: {texto}\n"
@@ -164,19 +188,28 @@ def diagnostico_cuda() -> list[str]:
 
 
 def _probar_carga() -> list[str]:
-    """Intenta cargar de verdad los DLLs. Es la única prueba que vale."""
+    """Intenta cargar los DLLs **por nombre**, como hace ctranslate2.
+
+    Con la ruta absoluta esto daría OK siempre que el archivo exista, que no es
+    la pregunta: lo que importa es si Windows lo encuentra por su cuenta. Ese
+    matiz ya costó un diagnóstico equivocado una vez.
+    """
     import ctypes
 
+    interesan = ("cublas64", "cudnn64", "cudnn_ops")
+    nombres = sorted({archivo.name
+                      for carpeta in _carpetas_dll_cuda()
+                      for archivo in carpeta.glob("*.dll")
+                      if archivo.name.startswith(interesan)})
+    if not nombres:
+        return ["    No encontré cublas64_*.dll ni cudnn*.dll para probar."]
+
     lineas = []
-    for carpeta in _carpetas_dll_cuda():
-        for dll in sorted(carpeta.glob("*.dll")):
-            if not any(dll.name.startswith(p) for p in ("cublas64", "cudnn64", "cudnn_ops")):
-                continue
-            try:
-                ctypes.WinDLL(str(dll))
-                lineas.append(f"    OK    {dll.name}")
-            except OSError as error:
-                lineas.append(f"    FALLA {dll.name}: {error}")
-    if not lineas:
-        lineas.append("    No encontré cublas64_*.dll ni cudnn*.dll para probar.")
+    for nombre in nombres:
+        try:
+            ctypes.WinDLL(nombre)  # sin ruta: usa la búsqueda del sistema
+            lineas.append(f"    OK    {nombre}")
+        except OSError as error:
+            lineas.append(f"    FALLA {nombre} -- no está en la ruta de búsqueda "
+                          f"({error})")
     return lineas

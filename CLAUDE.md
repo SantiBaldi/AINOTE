@@ -262,7 +262,17 @@ python -m src gpu             # VRAM libre (diagnóstico)
   `nvidia-cudnn-cu12`). En Windows **no alcanza con instalarlos**: los DLLs
   quedan en `site-packages/nvidia/*/bin`, que no está en la ruta de búsqueda, y
   `ctranslate2` falla con "Library cublas64_12.dll is not found" igual.
-  `deps.registrar_dlls_cuda()` los agrega con `os.add_dll_directory` antes de
-  importar `faster-whisper`. En Linux es un no-op: ahí los encuentra por RPATH.
+  `deps.registrar_dlls_cuda()` los pone al alcance antes de importar
+  `faster-whisper`, y hace **dos** cosas porque una sola no alcanza:
+  `os.add_dll_directory` (para módulos de extensión de Python) y agregar las
+  carpetas al `PATH` del proceso. Lo segundo es lo que realmente arregla el
+  problema: `ctranslate2` carga cuBLAS desde su código C++ con un
+  `LoadLibrary` sin flags, y ese camino **no** consulta los directorios de
+  `AddDllDirectory` —sólo participan si quien carga pasa
+  `LOAD_LIBRARY_SEARCH_USER_DIRS`—. En Linux es un no-op: ahí los ubica el RPATH.
+- **Probar que un DLL carga: por nombre, nunca por ruta absoluta.**
+  `ctypes.WinDLL(r"C:\...\cublas64_12.dll")` da OK con que el archivo exista, y
+  la pregunta es otra: si Windows lo encuentra solo. `ctypes.WinDLL("cublas64_12.dll")`
+  es la prueba que vale. El diagnóstico de `gpu` daba falsos OK por esto.
 - **Modelos offline.** Primera descarga a `HF_HOME`. Después de la primera
   corrida, `HF_HUB_OFFLINE=1` garantiza que nunca más toque la red.
