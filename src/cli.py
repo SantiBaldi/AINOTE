@@ -115,6 +115,51 @@ def cmd_grabar(args: argparse.Namespace) -> int:
     return subprocess.run(orden, cwd=str(paths.RAIZ)).returncode
 
 
+def cmd_sesion(args: argparse.Namespace) -> int:
+    """Graba la reunión mientras se toma nota, y transcribe al cerrar."""
+    from . import sesion as mod_sesion
+
+    try:
+        import tkinter  # noqa: F401
+    except ImportError:
+        print("  Falta Tkinter, que es lo que dibuja la ventana de notas.\n"
+              "  Suele venir con Python; si lo instalaste sin él, reinstalá "
+              "Python marcando 'tcl/tk and IDLE'.\n"
+              "  Mientras tanto podés grabar sin notas: python -m src grabar",
+              file=sys.stderr)
+        return 3
+
+    from . import ui
+
+    titulo = args.titulo or input("  Nombre de la reunión (ej: perdidas): ").strip()
+    sesion = mod_sesion.Sesion(titulo or "reunion", dispositivo=args.dispositivo)
+    sesion.iniciar()
+    ui.abrir(sesion)
+    grabacion = sesion.cerrar()
+
+    if sesion.error is not None:
+        print(f"\n  La grabación falló: {sesion.error}\n"
+              f"  Revisá el micrófono con: python -m src dispositivos",
+              file=sys.stderr)
+        return 1
+    if grabacion is None or grabacion.duracion <= 0:
+        print("  No entró audio. Revisá el micrófono con: "
+              "python -m src dispositivos", file=sys.stderr)
+        return 1
+
+    print(f"  Grabado: {paths.relativa(sesion.audio)} "
+          f"({paths.hms(grabacion.duracion)})")
+    print(f"  Notas:   {paths.relativa(sesion.cuaderno.ruta)} "
+          f"({sesion.resumen()})")
+
+    if args.sin_transcribir:
+        print(f"  Para transcribir: python -m src transcribir {sesion.nombre}")
+        return 0
+
+    print()
+    return sesion.transcribir(_extra_transcripcion(args))
+
+
 def cmd_importar(args: argparse.Namespace) -> int:
     """Trae una grabación de afuera a /audio/ con el nombre de la convención.
 
@@ -254,6 +299,17 @@ def construir_parser() -> argparse.ArgumentParser:
                          help="segundos entre sondeos")
     _opciones_transcripcion(vigilar)
     vigilar.set_defaults(func=cmd_vigilar)
+
+    sesion = subs.add_parser(
+        "sesion", help="grabar tomando notas en la misma pantalla")
+    sesion.add_argument("titulo", nargs="?",
+                        help="nombre de la reunión; se te pregunta si no lo pasás")
+    sesion.add_argument("--dispositivo", type=int, default=None,
+                        help="índice del micrófono (ver: dispositivos)")
+    sesion.add_argument("--sin-transcribir", action="store_true",
+                        help="no encadenar la transcripción al cerrar")
+    _opciones_transcripcion(sesion)
+    sesion.set_defaults(func=cmd_sesion)
 
     importar = subs.add_parser(
         "importar", help="traer una grabación de afuera y transcribirla")

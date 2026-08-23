@@ -43,8 +43,17 @@ aparte.
 
 ## Uso
 
-Doble clic en **`grabar.bat`**: pide el nombre de la reunión, graba, y al cortar
-con Enter transcribe sola. Es todo lo que hace falta para una reunión.
+Doble clic en **`sesion.bat`**: abre la ventana de notas y graba. Escribís
+mientras hablan, cada línea queda sellada con el minuto del audio, y al cerrar
+la ventana transcribe sola.
+
+```
+[]  tarea        *  foco        #  sección        @Torres        !05-09
+```
+
+Enter sella la línea. El sello es el momento en que **empezaste** a escribirla.
+
+Si sólo querés grabar sin tomar notas, **`grabar.bat`** hace eso.
 
 Para la consola, doble clic en **`ainote.bat`** abre una ya ubicada en el
 proyecto y con el entorno activado. Sin eso hay que hacer los dos pasos a mano

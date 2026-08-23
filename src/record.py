@@ -136,8 +136,18 @@ def _pintar_cronometro(transcurrido: float) -> None:
 
 
 def grabar(destino: Path, dispositivo=None,
-           sample_rate: int = SAMPLE_RATE_DESEADO) -> Grabacion:
-    """Graba del micrófono a `destino` hasta que se corte con una tecla."""
+           sample_rate: int = SAMPLE_RATE_DESEADO,
+           debe_cortar=None, al_avanzar=None) -> Grabacion:
+    """Graba del micrófono a `destino` hasta que se pida cortar.
+
+    `debe_cortar` es una función sin argumentos que devuelve True cuando hay
+    que terminar; por defecto mira el teclado de la consola. La ventana de
+    sesión pasa la suya, basada en un botón, para no depender de `msvcrt`.
+
+    `al_avanzar` recibe los segundos grabados cada vez que se refresca el
+    cronómetro. Es lo que le permite a la interfaz mostrar el reloj sin tener
+    que preguntar por él.
+    """
     sd = sounddevice()
 
     pedido = sample_rate
@@ -176,7 +186,9 @@ def grabar(destino: Path, dispositivo=None,
             wav.writeframes(datos)
             frames_escritos += len(datos) // (ANCHO_MUESTRA * canales)
 
-        print(f"  Grabando en {destino.name}. Hablá tranquilo.")
+        cortar = debe_cortar or _tecla_de_corte
+        if al_avanzar is None:
+            print(f"  Grabando en {destino.name}. Hablá tranquilo.")
         try:
             with stream:
                 inicio = time.monotonic()
@@ -188,9 +200,13 @@ def grabar(destino: Path, dispositivo=None,
                         pass
                     ahora = time.monotonic()
                     if ahora - ultimo_pintado >= 0.25:
-                        _pintar_cronometro(ahora - inicio)
+                        transcurrido = frames_escritos / sample_rate
+                        if al_avanzar is None:
+                            _pintar_cronometro(ahora - inicio)
+                        else:
+                            al_avanzar(transcurrido)
                         ultimo_pintado = ahora
-                    if _tecla_de_corte():
+                    if cortar():
                         break
         except KeyboardInterrupt:
             print("\n  Corte con Ctrl+C.")
@@ -206,7 +222,8 @@ def grabar(destino: Path, dispositivo=None,
         destino.unlink(missing_ok=True)
 
     duracion = frames_escritos / sample_rate if sample_rate else 0.0
-    sys.stdout.write("\r" + " " * 60 + "\r")
-    sys.stdout.flush()
+    if al_avanzar is None:
+        sys.stdout.write("\r" + " " * 60 + "\r")
+        sys.stdout.flush()
     return Grabacion(ruta=destino, duracion=duracion, sample_rate=sample_rate,
                      canales=canales, desbordes=desbordes)

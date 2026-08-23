@@ -281,18 +281,48 @@ sólo para ubicar los bloques de voz y transcribir cada uno por separado con
 | Fase | Qué hace | Estado |
 |---|---|---|
 | 1 | Grabador + transcriptor con timestamps, watcher | **Hecha** |
-| 2 | Nota en vivo: pantalla partida, timestamp sellado por línea | Pendiente |
+| 2 | Nota mientras se graba, timestamp sellado por línea | **Hecha (falta la vista de revisión)** |
 | 3 | Parser de marcadores → tareas y focos | Pendiente |
 | 4 | Minuta por map-reduce con Ollama, salida JSON estructurada | Pendiente |
 | 5 | Búsqueda global con SQLite FTS5 sobre todo el histórico | Pendiente |
 
 **No implementar fases futuras ni stubs elaborados antes de que se pidan.**
 
-### Gancho dejado para la Fase 2
+### DECISIÓN CERRADA: la transcripción NO es en vivo
 
-`src/record.py` separa la captura (callback de PortAudio que produce bloques
-hacia una cola) de la escritura del WAV. Para transcripción en vivo, la Fase 2
-engancha un segundo consumidor de esa cola sin reescribir el grabador.
+Se evaluó mostrar la transcripción mientras se habla y **se descartó**. Whisper
+no hace streaming: habría que transcribirlo por ventanas, con timestamps peores
+y el modelo ocupando la GPU toda la reunión, para un texto que igual se
+reemplaza al cerrar. No vale lo que cuesta.
+
+Durante la reunión se graba y se toma nota. La transcripción va después, entera,
+de una sola pasada, con la calidad ya validada. **El tiempo que tarde no
+importa**: nadie está esperando delante de la pantalla.
+
+Se implementó el aparato de ventanas (`src/vivo.py`) antes de esta decisión y se
+borró al tomarla. Está en la historia de git si alguna vez hiciera falta.
+
+### Cómo quedó la Fase 2
+
+- `src/notas.py` — la gramática de marcadores y el archivo de `/notes/`. Cada
+  línea se sella con el segundo en que **se empezó a escribirla**, no cuando se
+  apretó Enter: entre una cosa y la otra puede pasar medio minuto, y lo que
+  interesa es el momento de la reunión que disparó la anotación.
+- `src/sesion.py` — coordina grabador y cuaderno. El reloj sale de los frames
+  escritos al WAV, no de `time.monotonic()`: si el micrófono pierde bloques, el
+  reloj de pared se adelantaría y los sellos quedarían corridos.
+- `src/ui.py` — ventana de Tkinter. Sólo dibuja; no decide nada. Es a propósito,
+  porque es la parte que no se puede probar en un entorno sin pantalla.
+
+**Falta**: la vista de revisión (transcripción y notas lado a lado, saltando al
+audio desde una línea).
+
+### Probar la interfaz sin pantalla
+
+Tkinter se puede ejercitar con `xvfb-run` y sacarle una captura con `import`
+(ImageMagick). Así se encontró que la hoja, al packearse con `expand=True`
+antes que el campo de escritura, dejaba el campo y el pie fuera de la ventana.
+Los elementos de abajo se packean primero, con `side="bottom"`.
 
 ---
 
