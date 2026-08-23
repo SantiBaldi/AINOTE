@@ -152,6 +152,10 @@ def ruta_transcript(nombre: str) -> Path:
     return TRANSCRIPTS / f"{nombre}.md"
 
 
+def ruta_nota(nombre: str) -> Path:
+    return NOTES / f"{nombre}.md"
+
+
 def ruta_segmentos(nombre: str) -> Path:
     return TRANSCRIPTS / f"{nombre}.segments.json"
 
